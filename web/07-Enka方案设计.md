@@ -198,7 +198,7 @@ internal/handler/asset.go + router 注册：
 | `dto/genshin.go` 中 QR / Verification / RecordCard / Cookie 相关 | **删除** |
 | `web`：Cookie 卡片、扫码卡片、极验组件、`api/genshin.ts` 对应方法、i18n 相关 key | **删除**，页面简化为「UID 查询 + 档案展示」 |
 | `model`（chat 会话表）与对话模块 | **保留**（与米游社无关） |
-| `MIGRATION_NOTES.md` / `WEB_SERVER_DEV_GUIDE.md` | **保留**作参考存档 |
+| `MIGRATION_NOTES.md` / `WEB_SERVER_DEV_GUIDE.md` | **保留**作参考存档（已随本目录迁入共享仓 `teyvat-docs/web/`） |
 
 ## 8. 里程碑与工作量
 

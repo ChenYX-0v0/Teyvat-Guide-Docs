@@ -193,7 +193,7 @@ Invoke-RestMethod -Method Post "http://<服务地址>:8080/api/admin/assets/relo
 
 ## 7. 内网管理接口（X-Internal-Key，供后台运维系统调用）
 
-**路径不带 `/api` 前缀**（契约见根目录 `04-用户体系与鉴权边界设计.md` §4）。请求头：`X-Internal-Key: <auth.internal_key>`；
+**路径不带 `/api` 前缀**（契约见 `shared-docs/04-用户体系与鉴权边界设计.md` §4）。请求头：`X-Internal-Key: <auth.internal_key>`；
 **未配置 `auth.internal_key` 时该组路由不注册**（安全默认），请求头缺失/错误一律 401。
 
 | 方法 | 路径 | 说明 |
