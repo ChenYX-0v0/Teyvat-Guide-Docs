@@ -62,17 +62,18 @@
 
 ---
 
-## C. 用户体系（`docs/04`）
+## C. 用户体系（`docs/04` → 契约真源在共享仓 `shared/04`）
 
 ### 后台侧（已完成）
 - [x] 内网客户端 `teyvat-users.ts` + 用户管理页 + Actions
 - [x] `PROJECT_TEYVAT_GUIDE_INTERNAL_KEY` 配置项
 
-### web 侧（待实现）
-- [ ] `GET /internal/v1/admin/users`（列表，`X-Internal-Key`）
-- [ ] `POST /internal/v1/admin/users/status`（封禁/解封，联动会话失效）
-- [ ] `middleware.InternalKeyAuth` + 仅内网可达
-- [ ] 双方配置同名内部密钥，联调用户管理页
+### web 侧（已完成 · 2026-09-12 核实）
+- [x] `GET /internal/v1/admin/users`（`router.go` 注册 + `handler/internal_user.go` + `service/admin_users.go`）
+- [x] `POST /internal/v1/admin/users/status`（封禁/解封，幂等）
+- [x] `middleware.InternalKeyAuth` + 仅内网可达（`auth.internal_key` 未配置时整组不注册）
+- [x] 封禁联动：`middleware.UserStatusChecker` 每次请求校验封禁态 → 既有 JWT 立即失效、无法重新登录
+- [ ] **唯一剩余动作**：双方在同一环境填同名密钥，联调一次「用户管理」页（封禁后旧 Token 应立即失效）
 
 ---
 
@@ -101,4 +102,4 @@
 
 - [ ] 中转网关语言与落地时机（D1 + 是否现在启动 G0）
 - [ ] 是否把资产映射 CRUD 收进网关（D2，影响是否长期直连 `teyvat_guide`）
-- [ ] web 侧内网接口的排期（用户管理页当前为"接口未就绪"占位状态）
+- [x] ~~web 侧内网接口的排期~~ → **已实现**（见 C 段；用户管理页不再是"接口未就绪"占位），改为待定：何时做一次双密钥联调

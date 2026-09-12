@@ -40,12 +40,58 @@
 | --- | --- | --- | --- |
 | sessionId | string | 否 | 为空则创建新会话 |
 | message | string | 是 | 用户提问，最长 4000 字符 |
-| stream | bool | 否 | 流式输出（预留） |
+| stream | bool | 否 | `true` 走 SSE 流式（见 §2.2），缺省为非流式 |
+
+**历史组装（两种模式一致）**：取本会话**最近 20 条**消息为上限，再按 **1200 tokens 预算**从最近往前裁剪（超预算即截断，但始终保留最新一条）；同时
+①丢弃尾部与本次提问相同的那条 user 消息（提问由 `prompt` 字段单独下发，重复发送会重复计费并干扰模型）；
+②过滤降级兜底文案（不承载有效信息，留在上下文会污染后续对话）。
+裁剪只影响发给模型的内容，落库始终完整。
+
+### 2.1 非流式（`stream` 缺省/false）
 
 **响应 data**：`{ sessionId, reply, tokens, elapsedMs }`
 
+### 2.2 流式（`stream=true`，SSE）
+
+响应头 `Content-Type: text/event-stream`；帧格式（与 AI 服务 `shared-docs/01-接口契约.md` §6 同构，但**事件流没有外层信封**）：
+
+```
+event: session
+data: {"sessionId":"166f3ff1-bc35-4384-8544-cf2980714ffa"}
+
+event: delta
+data: {"text":"胡桃"}
+
+event: delta
+data: {"text":"是往生堂第七十七代堂主"}
+
+event: done
+data: {"sessionId":"166f3ff1-...","tokens":633,"elapsedMs":1606}
+```
+
+| 事件 | `data` | 说明 |
+| --- | --- | --- |
+| `session` | `{sessionId}` | **首个事件**，先于任何增量；流中断时前端也能保留会话归属 |
+| `delta` | `{text}` | 增量文本，可多次 |
+| `done` | `{sessionId, tokens, elapsedMs}` | **唯一终止成功事件** |
+| `error` | `{message}` | 已脱敏的提示文案；出现后连接结束（HTTP 已是 200，不能只看状态码） |
+
+**事件序列**：`session` → `delta*` → (`done` | `error`)，不会出现 `done` 之后还有 `delta`。
+
+**降级语义**：
+- AI 服务不可用且**一个增量都未产出** → 仍返回 HTTP 200，把兜底文案作为 `delta` 下发，随后 `done`（与非流式一致，用户始终能看到可读回复）；
+- 已产出部分内容后上游失败 → 正常关闭并下发 `error`（文案已脱敏，前端保留已生成内容并提示）；
+- 客户端断连 → 服务端停止产出并结束请求，不再占用上游配额。
+
+**注意**：经反向代理（Nginx）时必须关闭响应缓冲，否则会被攒包一次性吐出：
+`proxy_buffering off; proxy_read_timeout 120s;`。前端由 `web/src/api/chat.ts` 用 `fetch` + `ReadableStream` 逐行解析（`axios` 无法读取浏览器流）。
+
+### 2.3 AI 后端与降级（两种模式通用）
+
 **AI 后端**：`ai.provider` 决定，`mock`（兜底）/`openai`（直连）/ **`remote`（默认，对接独立 AI 派蒙服务）**。
-remote 模式下主服务调用 AI 服务 `POST /v1/complete`（`X-AI-Key` 鉴权），AI 服务不可用或超时时**降级**：仍返回 200，`reply` 为兜底文案、`tokens=0`，错误明细只进服务端日志（不向前端暴露）。上下文取本会话最近 20 条消息；系统提示词留空则由 AI 服务提供人格。详见 `docs/08-AI服务接入规格.md`。
+remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/stream`（`X-AI-Key` 鉴权），AI 服务不可用或超时时**降级**（见 §2.2 与下述要点）：错误明细只进服务端日志，不向前端暴露。系统提示词留空则由 AI 服务提供人格。详见 `docs/08-AI服务接入规格.md`。
+
+**超时**：非流式用 `ai.timeout_seconds`（默认 65s，必须大于 AI 服务自身的 55s）；**流式下该配置作为「空闲超时」**——任一段静默超过该时长即中止，但整段回答可以更长（否则长回答会被整体超时掐断）。
 
 **个性化上下文（可选鉴权）**：携带 `Authorization: Bearer <token>` 且该账号已绑定游戏 UID 时，主服务会在调用 AI 前注入玩家档案摘要（`context.player.characters`，≤1500 tokens），使「养成/配队」类问题基于真实面板作答；匿名请求不带上下文，功能完全不受影响。会话归属记录在 `chat_sessions.user_id`（0 = 匿名）。
 
