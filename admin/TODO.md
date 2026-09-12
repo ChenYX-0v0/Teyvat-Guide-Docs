@@ -81,7 +81,7 @@
 - [x] `POST /internal/v1/admin/users/status`（封禁/解封，幂等）
 - [x] `middleware.InternalKeyAuth` + 仅内网可达（`auth.internal_key` 未配置时整组不注册）
 - [x] 封禁联动：`middleware.UserStatusChecker` 每次请求校验封禁态 → 既有 JWT 立即失效、无法重新登录
-- [ ] **唯一剩余动作**：双方在同一环境填同名密钥，联调一次「用户管理」页（封禁后旧 Token 应立即失效）
+- [x] **联调已完成（2026-09-12 实测）**：密钥已一致；封禁前 `me` 200 → 封禁 → 封禁后 `me`/`chat`/重新登录均 403 → 解封后登录 200。用户管理页可正常使用，本段无剩余动作
 
 ---
 
