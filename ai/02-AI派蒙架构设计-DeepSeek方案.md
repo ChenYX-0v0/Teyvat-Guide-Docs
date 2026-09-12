@@ -1,6 +1,6 @@
 # AI 派蒙架构设计（LangChain + DeepSeek）
 
-> **接口的权威表述见 `01-接口契约.md`**；本文讲设计取舍与实现。
+> **接口的权威表述见 `shared-docs/01-接口契约.md`**；本文讲设计取舍与实现。
 >
 > 本文为 **v2**，决策要点：AI 服务采用 **Python + LangChain**（原 v1 的 Go 方案作废）。
 > 一句话：**主服务 Go :8080 管业务与持久化不变，AI 派蒙服务用 Python/LangChain 做 :8090，DeepSeek 通过官方集成接入；对外 HTTP 契约保持稳定（见 §3 与 README）。**
