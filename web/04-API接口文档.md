@@ -113,6 +113,31 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 
 改资料（`/api/admin/assets/import` 或直写 DB 后 reload、**带 `?purgeSnapshots=true`**）后，回答应随之变化 —— 这是 V2 的验收方式。会话归属记录在 `chat_sessions.user_id`（0 = 匿名）。
 
+### 2.4 会话管理（列表 / 明细 / 重命名；**需登录**）
+
+匿名没有「我的会话」这个概念，因此以下三个接口一律挂 `JWTAuth`（不是 `/api/chat` 的 `JWTAuthOptional`）：
+**未带 Token 或 Token 无效/过期 → 401**。消息只从服务端拉，前端不缓存正文。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/sessions?page=1&pageSize=20` | 本人会话列表（不含消息正文）；活跃时间倒序 `updated_at DESC, id DESC`；`pageSize` 上限 100 |
+| GET | `/api/sessions/{sessionId}/messages?beforeId=&limit=` | 会话明细；**向上游标分页**：返回 `id < beforeId` 的**最近** `limit` 条（缺省 100、上限 200），按 `id` 升序；`hasMore=true` 表示还有更早的，用返回首条的 `id` 继续当 `beforeId` |
+| PATCH | `/api/sessions/{sessionId}` | 重命名，body `{title}`；去首尾空白，空 → 400，超 50 字 → 400；返回服务端归一化后的标题 |
+| DELETE | `/api/sessions/{sessionId}` | 删除会话（**软删除**）：C 端从此不可见，数据保留供后台审计；重复删除 → 404 |
+
+**列表项**：`{sessionId, title, messageCount, createdAt, updatedAt}`，外层 `{items, total, page, pageSize}`。
+**明细**：`{sessionId, messages: [{id, role, content, createdAt}], hasMore}` —— 用量 / 降级标记属运维信息，只在 §7 的 `/internal/v1/admin/chat/*` 下发。
+
+**口径（2026-09-12 定）**：
+
+1. **只服务登录用户**：列表只返回 `chat_sessions.user_id = 本人` 的会话；匿名会话（`user_id = 0`）不进任何人的列表；
+2. **匿名不持久化**：前端只把登录用户的当前 `sessionId` 存 localStorage 并在进入页面时恢复；匿名刷新即新对话（同一页面内仍可连续对话）；
+3. **不认领匿名会话**：先匿名聊、后登录，那条匿名会话不会并到账号下（登录后是新会话）；
+4. **删除是软删除**（置 `chat_sessions.deleted_at`，不物理删除）：C 端（列表 / 明细 / 改名 / 续聊）从此不可见，数据保留供后台审计与成本统计；**B 端仍可查**并标注「已删除」（见 §7.1 的 `deletedAt` / `onlyDeleted`），后台不提供删除入口；
+5. **写入侧同样校验归属**：`POST /api/chat` 带的 `sessionId` 若非本人所有（或已不存在、已删除），**一律当作新会话**，不会续聊别人的会话，也不会让已删除的会话复活；
+6. 非本人、不存在、已删除的会话，读 / 改名 / 删除统一 **404「会话不存在」**（不返回 403，避免被用来探测会话是否存在；重复删除也因这条自然幂等）；
+7. 重命名与删除都**不刷新 `updated_at`**（只改 `title` / `deleted_at`），否则列表顺序会因改名或删除而跳动。
+
 ---
 
 ## 3. 鉴权（已实现）
@@ -285,10 +310,10 @@ Invoke-RestMethod -Method Post "http://<服务地址>:8080/api/admin/assets/relo
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/internal/v1/admin/chat/sessions?keyword=&userId=&uid=&onlyDegraded=&from=&to=&page=1&pageSize=20` | 会话列表（**不含消息正文**）；`keyword` **只匹配提问内容**（既定口径，不搜回答）；排序 `updated_at DESC, id DESC`；`pageSize` 上限 100 |
+| GET | `/internal/v1/admin/chat/sessions?keyword=&userId=&uid=&onlyDegraded=&onlyDeleted=&from=&to=&page=1&pageSize=20` | 会话列表（**不含消息正文**）；`keyword` **只匹配提问内容**（既定口径，不搜回答）；排序 `updated_at DESC, id DESC`；`pageSize` 上限 100；**默认不过滤用户已删除的会话**（含已删除，前端标注），`onlyDeleted=true` 只看已删除 |
 | GET | `/internal/v1/admin/chat/sessions/{sessionId}/messages?afterId=&limit=` | 会话明细；**游标分页**（取 `afterId` 之后的消息，`hasMore` 提示还有）；`limit` 上限 500、默认 200；会话不存在 → 404 |
 
-**列表项字段**：`sessionId / title / userId(0=匿名) / username / displayName / genshinUid / messageCount / tokens / degradedCount / hasPlayerContext / hasAssetReference / lastQuestion(截断摘要) / createdAt / updatedAt`，外层 `{items,total,page,pageSize}`。
+**列表项字段**：`sessionId / title / userId(0=匿名) / username / displayName / genshinUid / messageCount / tokens / degradedCount / hasPlayerContext / hasAssetReference / lastQuestion(截断摘要) / createdAt / updatedAt / deletedAt(用户在 C 端删除的时间，null = 未删除)`，外层 `{items,total,page,pageSize}`。
 
 **消息字段**：`id / role / content / tokens / tokensInput / tokensOutput / tokensCached / model / profile / degraded / elapsedMs / createdAt`，外层 `{sessionId,userId,messages,hasMore}`。
 
@@ -298,6 +323,7 @@ Invoke-RestMethod -Method Post "http://<服务地址>:8080/api/admin/assets/relo
 - `hasPlayerContext` / `hasAssetReference`＝该会话**曾经**注入过玩家面板 / 资产资料（V1/V2 的落地效果观测）。
 
 **红线**：只读——**不提供修改 / 删除消息的接口**（对话记录属审计数据，需要清理只能运维直接操作数据库）。
+C 端用户发起的「删除会话」是**软删除**（`chat_sessions.deleted_at`）：数据仍在、后台照常可见并标注「已删除」，**后台不提供删除入口**。
 
 ---
 
