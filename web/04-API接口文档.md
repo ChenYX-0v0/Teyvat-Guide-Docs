@@ -270,8 +270,25 @@ Invoke-RestMethod -Method Post "http://<服务地址>:8080/api/admin/assets/relo
 **外部（后台）配置**：后台侧环境变量 `PROJECT_TEYVAT_GUIDE_INTERNAL_KEY` = 本服务的 `auth.internal_key`。
 三类密钥必须各自独立：用户 JWT（`jwt_secret`）／资产管理（`admin_key`）／内网管理（`internal_key`）／AI 服务（`X-AI-Key`）。
 
-> **规划中（未实现，勿按此调用）**：对话记录查看接口 `GET /internal/v1/admin/chat/sessions` 与 `/sessions/{id}/messages`（只读，供后台「对话记录」页）。
-> 契约与数据改动见共享仓 `admin/06-对话记录查看设计.md`；**实现后必须回到本节补完整契约**。
+### 7.1 对话记录查看（只读 · 已实现 2026-09-12）
+
+设计见共享仓 `admin/06-对话记录查看设计.md`；后台页面为「AI 提瓦特向导 → 对话记录」。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/internal/v1/admin/chat/sessions?keyword=&userId=&uid=&onlyDegraded=&from=&to=&page=1&pageSize=20` | 会话列表（**不含消息正文**）；`keyword` **只匹配提问内容**（既定口径，不搜回答）；排序 `updated_at DESC, id DESC`；`pageSize` 上限 100 |
+| GET | `/internal/v1/admin/chat/sessions/{sessionId}/messages?afterId=&limit=` | 会话明细；**游标分页**（取 `afterId` 之后的消息，`hasMore` 提示还有）；`limit` 上限 500、默认 200；会话不存在 → 404 |
+
+**列表项字段**：`sessionId / title / userId(0=匿名) / username / displayName / genshinUid / messageCount / tokens / degradedCount / hasPlayerContext / hasAssetReference / lastQuestion(截断摘要) / createdAt / updatedAt`，外层 `{items,total,page,pageSize}`。
+
+**消息字段**：`id / role / content / tokens / tokensInput / tokensOutput / tokensCached / model / profile / degraded / elapsedMs / createdAt`，外层 `{sessionId,userId,messages,hasMore}`。
+
+**观测字段说明**：
+- `tokensCached`＝命中前缀缓存的 tokens（单价约为未命中的 1/50，**成本统计必须分开算**）；
+- `degraded` 由服务端标记，不再靠文案比对判断；
+- `hasPlayerContext` / `hasAssetReference`＝该会话**曾经**注入过玩家面板 / 资产资料（V1/V2 的落地效果观测）。
+
+**红线**：只读——**不提供修改 / 删除消息的接口**（对话记录属审计数据，需要清理只能运维直接操作数据库）。
 
 ---
 
