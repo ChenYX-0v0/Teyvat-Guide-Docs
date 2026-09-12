@@ -270,6 +270,9 @@ Invoke-RestMethod -Method Post "http://<服务地址>:8080/api/admin/assets/relo
 **外部（后台）配置**：后台侧环境变量 `PROJECT_TEYVAT_GUIDE_INTERNAL_KEY` = 本服务的 `auth.internal_key`。
 三类密钥必须各自独立：用户 JWT（`jwt_secret`）／资产管理（`admin_key`）／内网管理（`internal_key`）／AI 服务（`X-AI-Key`）。
 
+> **规划中（未实现，勿按此调用）**：对话记录查看接口 `GET /internal/v1/admin/chat/sessions` 与 `/sessions/{id}/messages`（只读，供后台「对话记录」页）。
+> 契约与数据改动见共享仓 `admin/06-对话记录查看设计.md`；**实现后必须回到本节补完整契约**。
+
 ---
 
 ## 8. 业务数据表总览（teyvat_guide 库）
