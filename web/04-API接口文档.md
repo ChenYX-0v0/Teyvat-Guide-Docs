@@ -93,7 +93,16 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 
 **超时**：非流式用 `ai.timeout_seconds`（默认 65s，必须大于 AI 服务自身的 55s）；**流式下该配置作为「空闲超时」**——任一段静默超过该时长即中止，但整段回答可以更长（否则长回答会被整体超时掐断）。
 
-**个性化上下文（可选鉴权）**：携带 `Authorization: Bearer <token>` 且该账号已绑定游戏 UID 时，主服务会在调用 AI 前注入玩家档案摘要（`context.player.characters`，≤1500 tokens），使「养成/配队」类问题基于真实面板作答；匿名请求不带上下文，功能完全不受影响。会话归属记录在 `chat_sessions.user_id`（0 = 匿名）。
+**业务上下文注入（两条链路，都是可选、都可降级）**：
+
+| 链路 | 触发条件 | 内容 | 预算 |
+| --- | --- | --- | --- |
+| **资产资料**（V2，公开数据） | 提问命中角色名（**与登录无关，匿名同样生效**） | 查 `asset_character_stat_weights` → 渲染成「【游戏资料】…」文本放入 `context.summary`，含 primary/secondary 分级与推荐主词条 | ≤400 tokens，最多 2 个角色 |
+| **玩家档案**（V1，私有数据） | 携带 `Authorization: Bearer <token>` 且该账号已绑定游戏 UID | `context.player.characters`（展柜角色概览 + 点名角色明细） | ≤1500 tokens |
+
+两者都注入时，`summary` 里的资料排在玩家档案之前。命中但库里没有数据的角色会显式写成「本服暂无该角色的资料」，配合 AI 服务人格提示词的「资料外不编造」规则，冷门角色会老实承认不知道而不是编数值。
+
+改资料（`/api/admin/assets/import` 或直写 DB 后 reload、**带 `?purgeSnapshots=true`**）后，回答应随之变化 —— 这是 V2 的验收方式。会话归属记录在 `chat_sessions.user_id`（0 = 匿名）。
 
 ---
 
