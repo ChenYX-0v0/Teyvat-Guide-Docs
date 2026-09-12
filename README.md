@@ -37,3 +37,4 @@ powershell -ExecutionPolicy Bypass -File C:\Users\HONOR\Desktop\teyvat-docs\setu
 3. **跨项目契约放 `shared/`**，项目内部文档放各自目录；禁止在项目里另存副本（历史上 `admin/docs/teyvatGuide/`、`admin/aidoc/doc/` 就是副本，已清理）。
 4. 编号在**各自目录内**唯一即可（web 与 admin 均存在 01~05，靠目录区分；交叉引用请写明路径）。
 5. 变更契约类文档（`shared/`）后，需同步检查三个项目是否受影响并在提交信息中说明。
+6. **本地调试密钥例外条款**（2026-09-12）：三个项目的 `AGENTS.md` 均已写入——**本机开发调试期间，AI 可直接读取 / 使用 / 对齐本地密钥**（`.env`、`config/config.yaml`、注册表凭证），用于启动服务、跑测试、带密钥联调；但**不入仓、不回显、只对本机、不擅自换钥、付费 Key 节制**。属跨项目工作约定，改动需三处同步。
