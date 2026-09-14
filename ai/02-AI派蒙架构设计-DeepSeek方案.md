@@ -20,7 +20,7 @@
 **偏差说明（需要你在 `AGENTS.md` / `docs/01` 登记）**：
 原方案建议"同仓可复用 `pkg/logger`、`pkg/response`"。跨语言后该建议不可行，替代方案：
 1. **响应信封在 Python 侧重新实现**，字段与 Go 版逐字节对齐（`{code,message,data}`），用 Pydantic model 保证结构；
-2. **日志用 structlog 输出 JSON 行**，字段命名对齐 `logger.L()`（`level/ts/msg/...`），便于统一采集；
+2. **日志用 structlog 输出 JSON 行**，字段命名对齐 `logger.L()`（`level/ts/event/...`——**事件名在 `event`，不是 `msg`**），便于统一采集；
 3. 代码仍放同仓 `ai-service/` 目录（独立进程），靠契约而非代码耦合。
 
 > 这样做的收益：LangChain 生态全量可用、学习目标达成、未来工具/Agent 扩展顺畅。
@@ -149,14 +149,15 @@ ChatOpenAI(model="deepseek-flash", timeout=55, max_retries=1, stream_usage=True)
 ```
 ai_prompts 表（主服务库，AI 服务只读 + TTL 60s 内存缓存）
   scene_key | content | version | enabled
-  paimon_base | "你是派蒙……" | 3 | 1
+  paimon_base | "你是派蒙……" | 1 | 1
+  （paimon_rules / paimon_fewshot 也在同一张表，各自多版本共存，取"启用且版本最高"）
 
-渲染顺序（稳定 → 动态）:
-  ① persona(DB, 场景=paimon_base)
-  ② biz_rules(DB)     拒绝换角色 / 防注入 / 数值不幻觉
-  ③ few_shot(DB)      2~3 组派蒙语气示例
-  ④ rag_context       检索结果 + 来源标注 (P2)
-  ⑤ player_profile    玩家档案摘要 (P1)
+渲染顺序（稳定 → 动态；实现见 ai-service/app/chains/persona.py）:
+  ① paimon_base        身份设定
+  ② paimon_rules       回答规则 / 输出格式 / 安全边界（拒绝换角色、防注入、数值不幻觉）
+  ③ paimon_fewshot     派蒙语气示例
+  ④ request_system     主服务下发的补充指令（`ai.system`，默认留空）
+  ⑤ player_profile + asset_summary + rag_context   玩家档案 (P1) / 游戏资料 (V2) / 检索结果 (P2)
 ```
 
 实装采用**显式拼装**：稳定三段从 DB 取出后按序拼接，动态段按 token 预算逐段填充、超预算即丢弃，

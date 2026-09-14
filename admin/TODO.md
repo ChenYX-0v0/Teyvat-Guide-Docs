@@ -71,11 +71,13 @@
   - 用户管理页：加「当日用量」列（`todayTokens`，附 input/output/cached/请求数）、筛选「今日 ≥ 5 万 token」（`usageDate` + `minDailyTokens`）、筛选「有无关提问」（`onlyOffTopic` / `offTopicMin`）；
   - 对话记录页：加 `onlyOffTopic` 筛选与 `offTopicCount` 列，明细里给无关提问打 Tag（「无关 · `chitchat`」）；
   - 依赖：web 侧内网接口扩参 + `chat_messages.off_topic / off_topic_reason` 落库（判定方式见 `../shared/05` §3.2 与 `../ai/07` TODO-03）；
+  - 界面口径（2026-09-15 核对）：接口还支持 `usageDate` / `offTopicMin`，**界面未使用**（`usageDate` 缺省为今天）；「今日 Token」列已附 **入 / 出 / 缓存 / 请求数** 小字；
   - 组合用法：`minDailyTokens=50000` + `onlyOffTopic=true` = 「今日用量高**且**问无关问题」的名单。
 - [x] **M3-e 预设问答维护页（2026-09-14 完成）**：新菜单「AI 提瓦特向导 → 预设问答」，列表（含已下架）+ 新建/编辑弹窗 + 列表内直接上下架；主服务侧新增 `GET/POST /internal/v1/admin/preset-qa` 与 `PUT /internal/v1/admin/preset-qa/{id}`（`X-Internal-Key`）。
   - 口径：**不做删除**，下架用 `enabled=false`（C 端立刻不再展示、数据保留、随时可恢复）；写库即生效，无需发版或重启。
   - 契约见 `../web/04-API接口文档.md` §7.2；设计见 `../shared/05-AI使用边界设计（匿名·配额·内容治理）.md` §1.3 / §7.3（D6 已结）。
   - 未做：排序拖拽、分组字典（暂靠 `sort` 数字与自由文本 `sceneKey`）。
+- [x] **M3-b 补完（2026-09-15）**：对话记录页补「**游戏 UID**」筛选（`teyvat-chats.ts` 的 `uid` 入参 + `ChatLogPanel` 输入框——设计 §5 一直写着要支持，此前只有 `userId` 跳转）；用户管理页「今日 Token」列内补 **入 / 出 / 缓存 / 请求数** 小字（接口早就在返回这四个字段，此前未展示）。
 - [x] **M3-f 提示词管理页（2026-09-15 完成）**：新菜单「AI 提瓦特向导 → 提示词管理」，按场景列全部版本（标出「生效中」）、新增版本、一键启用 / 回滚；主服务侧新增 `GET/POST /internal/v1/admin/ai-prompts` 与 `PUT /internal/v1/admin/ai-prompts/{id}`（`X-Internal-Key`）。
   - 口径：**内容按版本不可变**——没有"改内容"接口，改文案一律"新增一版"（`version` 由服务端分配为 max+1）；**生效 = 启用且版本最高**；**回滚 = 把新版本 `enabled` 置 0**（自动回落上一启用版本）；不做物理删除；生效延迟 **≤60s**（AI 服务提示词 TTL 缓存），无需重启。
   - 契约见 `../shared/03-主服务对接说明.md` §5.2（含「我要改提示词，从哪改」三条路）；设计见 `07-提示词管理设计.md`。

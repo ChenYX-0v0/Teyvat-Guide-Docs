@@ -100,7 +100,7 @@ data: {"sessionId":"166f3ff1-...","tokens":633,"elapsedMs":1606}
 
 ### 2.3 AI 后端与降级（两种模式通用）
 
-**AI 后端**：`ai.provider` 决定，`mock`（兜底）/`openai`（直连）/ **`remote`（默认，对接独立 AI 派蒙服务）**。
+**AI 后端**：`ai.provider` 决定，`mock`（**代码内置默认**）/`openai`（直连）/ **`remote`（当前 `config.yaml` 配的值，对接独立 AI 派蒙服务）**。
 remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/stream`（`X-AI-Key` 鉴权），AI 服务不可用或超时时**降级**（见 §2.2 与下述要点）：错误明细只进服务端日志，不向前端暴露。系统提示词留空则由 AI 服务提供人格。详见 `docs/08-AI服务接入规格.md`。
 
 **超时**：非流式用 `ai.timeout_seconds`（默认 65s，必须大于 AI 服务自身的 55s）；**流式下该配置作为「空闲超时」**——任一段静默超过该时长即中止，但整段回答可以更长（否则长回答会被整体超时掐断）。
@@ -172,8 +172,11 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 {
   "code": 429,
   "message": "今日 AI 额度已用完，明日 0 点重置",
-  "data": { "used": 100230, "limit": 100000, "resetAt": "2026-09-15T00:00:00+08:00" }
+  "data": { "reason": "daily", "used": 100230, "limit": 100000, "resetAt": "2026-09-15T00:00:00+08:00" }
 }
+```
+
+> `reason` **恒存在**，取值：`daily`（日配额）/ `concurrent`（单用户并发超限）/ `global`（全站日预算熔断）。
 ```
 
 | 要点 | 说明 |
@@ -230,11 +233,11 @@ $H = @{ Authorization = "Bearer " + $r.data.token }
 | characters[].stats[] | 面板属性 `{name, value, tier?}`；tier=`primary`/`secondary`（推荐属性，前端金色），空为未分级（灰色） |
 | characters[].statWeights | 推荐强化词条（来源 asset_character_stat_weights，见 6.2） |
 | characters[].weapon | `{name, rarity, level, affix}` |
-| characters[].relics[] | 圣遗物：name / set / rarity / level / pos / mainStat / mainStatTier / subStats[]{name,value,count,tier} |
+| characters[].relics[] | 圣遗物：name / set / rarity / level / pos（部位枚举）/ slot（部位中文名）/ mainStat / mainStatTier / subStats[]{name,value,count,tier} |
 | warnings | 翻译缺漏提示（前端当前不展示，明细仍落 asset_missings 表） |
 
 **错误映射**：404 玩家不存在或未公开；503 游戏维护 / 上游限流；502 其他上游错误。
-**缓存**：本地快照优先（`asset_player_profile_snapshots` 表，uid 主键）；负缓存 5min 防扫号穿透。
+**缓存**：本地快照优先（`player_profile_snapshots` 表，uid 主键）；负缓存 5min 防扫号穿透。
 
 ### 4.2 档案快照
 
@@ -344,7 +347,7 @@ Invoke-RestMethod -Method Post "http://<服务地址>:8080/api/admin/assets/relo
 
 - 鉴权中间件（`JWTAuth` / `JWTAuthOptional`）每次都校验封禁状态 → **封禁后既有 JWT 立即失效**（403 `账号已被封禁，请联系管理员`）；
 - 封禁用户无法重新登录（403 `账号已被封禁`）；解封后恢复；
-- `GET /internal/v1/admin/users/status` 不存在用户 → 404 `用户不存在`。
+- `POST /internal/v1/admin/users/status` 不存在用户 → 404 `用户不存在`。
 
 **错误码**：401 缺少/错误 X-Internal-Key；404 用户不存在；400 参数错误。
 
@@ -357,14 +360,14 @@ Invoke-RestMethod -Method Post "http://<服务地址>:8080/api/admin/assets/relo
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/internal/v1/admin/chat/sessions?keyword=&userId=&uid=&onlyDegraded=&onlyDeleted=&onlyOffTopic=&from=&to=&page=1&pageSize=20` | 会话列表（**不含消息正文**）；`keyword` **只匹配提问内容**（既定口径，不搜回答）；排序 `updated_at DESC, id DESC`；`pageSize` 上限 100；**默认不过滤用户已删除的会话**（含已删除，前端标注），`onlyDeleted=true` 只看已删除；**`onlyOffTopic=true` 只看含无关提问的会话**（2026-09-14 新增，待实现） |
+| GET | `/internal/v1/admin/chat/sessions?keyword=&userId=&uid=&onlyDegraded=&onlyDeleted=&onlyOffTopic=&from=&to=&page=1&pageSize=20` | 会话列表（**不含消息正文**）；`keyword` **只匹配提问内容**（既定口径，不搜回答）；排序 `updated_at DESC, id DESC`；`pageSize` 上限 100；**默认不过滤用户已删除的会话**（含已删除，前端标注），`onlyDeleted=true` 只看已删除；**`onlyOffTopic=true` 只看含无关提问的会话**（2026-09-14 新增，**已实现**） |
 | GET | `/internal/v1/admin/chat/sessions/{sessionId}/messages?afterId=&limit=` | 会话明细；**游标分页**（取 `afterId` 之后的消息，`hasMore` 提示还有）；`limit` 上限 500、默认 200；会话不存在 → 404 |
 
 **列表项字段**：`sessionId / title / userId(0=匿名) / username / displayName / genshinUid / messageCount / tokens / degradedCount / hasPlayerContext / hasAssetReference / lastQuestion(截断摘要) / createdAt / updatedAt / deletedAt(用户在 C 端删除的时间，null = 未删除) / offTopicCount(会话内无关提问数，判定未开启时为 0，2026-09-14 新增)`，外层 `{items,total,page,pageSize}`。
 
 **消息字段**：`id / role / content / tokens / tokensInput / tokensOutput / tokensCached / model / profile / degraded / elapsedMs / createdAt / offTopic(仅 role=user 有意义；null = 未判定) / offTopicReason(子类，2026-09-14 新增)`，外层 `{sessionId,userId,messages,hasMore}`。
 
-> 用户列表（`/internal/v1/admin/users`）的契约真源在 `shared-docs/04-用户体系与鉴权边界设计.md` §4.1；2026-09-14 为其新增了 `usageDate / minDailyTokens / onlyOffTopic / offTopicMin` 入参与 `todayTokens / todayRequests / offTopicCount` 字段（当日用量与无关问题筛选，**已实现**）。
+> 用户列表（`/internal/v1/admin/users`）的契约真源在 `shared-docs/04-用户体系与鉴权边界设计.md` §4.1；2026-09-14 为其新增了 `usageDate / minDailyTokens / onlyOffTopic / offTopicMin` 入参与 `todayTokens / todayInput / todayOutput / todayCached / todayRequests / offTopicCount` 字段（当日用量与无关问题筛选，**已实现**；后台界面目前只用 `minDailyTokens` 与 `onlyOffTopic`，`usageDate` 缺省为今天）。
 
 ### 7.2 预设问答维护（可运营 · 已实现 2026-09-14）
 
