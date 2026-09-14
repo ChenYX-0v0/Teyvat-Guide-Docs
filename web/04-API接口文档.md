@@ -364,7 +364,27 @@ Invoke-RestMethod -Method Post "http://<服务地址>:8080/api/admin/assets/relo
 
 **消息字段**：`id / role / content / tokens / tokensInput / tokensOutput / tokensCached / model / profile / degraded / elapsedMs / createdAt / offTopic(仅 role=user 有意义；null = 未判定) / offTopicReason(子类，2026-09-14 新增)`，外层 `{sessionId,userId,messages,hasMore}`。
 
-> 用户列表（`/internal/v1/admin/users`）的契约真源在 `shared-docs/04-用户体系与鉴权边界设计.md` §4.1；2026-09-14 为其新增了 `usageDate / minDailyTokens / onlyOffTopic / offTopicMin` 入参与 `todayTokens / todayRequests / offTopicCount` 字段（当日用量与无关问题筛选，待实现）。
+> 用户列表（`/internal/v1/admin/users`）的契约真源在 `shared-docs/04-用户体系与鉴权边界设计.md` §4.1；2026-09-14 为其新增了 `usageDate / minDailyTokens / onlyOffTopic / offTopicMin` 入参与 `todayTokens / todayRequests / offTopicCount` 字段（当日用量与无关问题筛选，**已实现**）。
+
+### 7.2 预设问答维护（可运营 · 已实现 2026-09-14）
+
+后台「AI 提瓦特向导 → 预设问答」的数据接口。**C 端免登录可见**（§2.5），这里给运营提供读写。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/internal/v1/admin/preset-qa` | 全部条目（**含已下架**），排序 `scene_key ASC, sort ASC, id ASC` |
+| POST | `/internal/v1/admin/preset-qa` | 新建，body `{sceneKey, question, answer, sort, enabled?}` |
+| PUT | `/internal/v1/admin/preset-qa/{id}` | 更新（**整体覆盖**这几个字段；`enabled` 省略 = 保持原值） |
+
+**响应 data（单条/列表项）**：`{id, sceneKey, question, answer, sort, enabled, createdAt, updatedAt}`。
+
+| 口径 | 说明 |
+| --- | --- |
+| **不做物理删除** | 下架只需 `enabled=false`：C 端立刻不再下发，**数据保留**，后台随时可恢复（与"对话记录不删"的理由不同：这里是运营需要随时改、随时撤） |
+| 生效方式 | 写库即生效，C 端下次拉取（`GET /api/preset-qa`）立刻看到；**无需发版、无需重启** |
+| 字段校验 | 提问/回答去首尾空白后非空；提问 ≤200、回答 ≤4000、分组 ≤32（按**字符**计）；`sort` 限 -9999~9999 |
+| 错误码 | 参数不合法 → **400**；`id` 不存在 → **404**；其余 → 500 |
+| 与种子的关系 | 表为空时启动会灌 6 条种子（`service/preset.go`）；后台新建/编辑/下架都只是普通数据操作 |
 
 **观测字段说明**：
 - `tokensCached`＝命中前缀缓存的 tokens（单价约为未命中的 1/50，**成本统计必须分开算**）；

@@ -72,6 +72,10 @@
   - 对话记录页：加 `onlyOffTopic` 筛选与 `offTopicCount` 列，明细里给无关提问打 Tag（「无关 · `chitchat`」）；
   - 依赖：web 侧内网接口扩参 + `chat_messages.off_topic / off_topic_reason` 落库（判定方式见 `../shared/05` §3.2 与 `../ai/07` TODO-03）；
   - 组合用法：`minDailyTokens=50000` + `onlyOffTopic=true` = 「今日用量高**且**问无关问题」的名单。
+- [x] **M3-e 预设问答维护页（2026-09-14 完成）**：新菜单「AI 提瓦特向导 → 预设问答」，列表（含已下架）+ 新建/编辑弹窗 + 列表内直接上下架；主服务侧新增 `GET/POST /internal/v1/admin/preset-qa` 与 `PUT /internal/v1/admin/preset-qa/{id}`（`X-Internal-Key`）。
+  - 口径：**不做删除**，下架用 `enabled=false`（C 端立刻不再展示、数据保留、随时可恢复）；写库即生效，无需发版或重启。
+  - 契约见 `../web/04-API接口文档.md` §7.2；设计见 `../shared/05-AI使用边界设计（匿名·配额·内容治理）.md` §1.3 / §7.3（D6 已结）。
+  - 未做：排序拖拽、分组字典（暂靠 `sort` 数字与自由文本 `sceneKey`）。
 
 ---
 
