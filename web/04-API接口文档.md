@@ -194,11 +194,11 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| POST | `/api/auth/register` | 无 | `{username, password, displayName?}`；用户名 3~32 字符，密码 ≥6 位 |
+| POST | `/api/auth/register` | 无 | `{username, password, displayName?}`；用户名 3~32 字符，密码 ≥6 位。**`auth.allow_register=false` 时一律 403** `本站为不公开邀请制，已关闭注册；请联系管理员开通账号`（项目当前口径，账号由后台代建，见 `shared-docs/04` §4.4） |
 | POST | `/api/auth/login` | 无 | 返回 `{token, displayName}`（JWT，有效期 `auth.jwt_ttl_hours`） |
 | GET | `/api/auth/me` | Bearer | 当前用户 `{id, username}` |
 
-注册成功后前端自动调用登录完成会话建立。
+注册成功后前端自动调用登录完成会话建立。**不公开部署（`auth.allow_register=false`）下，前端登录页不展示注册入口**，只显示邀请制说明（`web/src/pages/LoginPage.tsx`；i18n `login.inviteOnly` / `login.inviteHint`）。
 
 **curl 示例**
 
@@ -339,6 +339,7 @@ Invoke-RestMethod -Method Post "http://<服务地址>:8080/api/admin/assets/relo
 | --- | --- | --- |
 | GET | `/internal/v1/admin/users?keyword=&page=1&pageSize=20` | 用户列表；keyword 匹配 用户名 / 昵称 / 游戏 UID；`pageSize` 上限 100 |
 | POST | `/internal/v1/admin/users/status` | 封禁 / 解封 `{id, banned}`，幂等 |
+| POST | `/internal/v1/admin/users` | **代建 C 端账号**（邀请制下的唯一开户入口）：`{username, password, displayName?}` → `{id, username, displayName, createdAt}`；400 参数不合法 / 409 用户名已存在。契约见 `shared-docs/04` §4.4 |
 
 **列表项字段**：`id / username / displayName / genshinUid(可空) / status(active|banned) / createdAt / lastLoginAt(可空) / totalTokens`
 （`totalTokens` = 该用户经 `chat_sessions.user_id` 归属的 `chat_messages.tokens` 聚合）
