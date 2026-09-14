@@ -42,14 +42,17 @@
 | message | string | 是 | 用户提问，最长 4000 字符 |
 | stream | bool | 否 | `true` 走 SSE 流式（见 §2.2），缺省为非流式 |
 
-**鉴权语义（可选鉴权，`/api/chat` 与 `/api/genshin/*` 同）**：
+**鉴权语义（2026-09-14 变更：`/api/chat` 改为强制登录）**：
 
-| 请求 | 行为 |
-| --- | --- |
-| **未带** `Authorization` | 放行，按匿名处理（会话 `user_id=0`、不注入玩家面板；V2 资产资料仍生效） |
-| **带了但无效/过期** | **401 `登录状态已失效，请重新登录`** —— **不静默降级为匿名**（2026-09-12 变更）。否则用户以为还登录着，实际会话归属、面板注入、封禁联动全部失效，后台也认不出数据归属 |
+| 接口 | 未带 `Authorization` | 带了但无效 / 过期 |
+| --- | --- | --- |
+| `POST /api/chat` | **401 `请先登录后再使用 AI 问答`** —— **匿名不再具备 AI 对话能力**（2026-09-14 变更） | 401 `登录状态已失效，请重新登录` |
+| `/api/genshin/*`（只读） | 放行，按匿名处理 | 401 `登录状态已失效，请重新登录` |
 
-> 该变更对调用方是**行为变更**：旧版对无效 Token 返回 200（匿名）。前端收到 401 会清凭据并回登录页（`api/client.ts` 的 `handleUnauthorized`，axios 与流式 `fetch` 两条路径都会处理）。
+**为什么匿名禁用**：token 是花钱的，匿名消耗无归属、不可审计，也没有任何频率与配额手段（设计见 `shared-docs/05-AI使用边界设计（匿名·配额·内容治理）.md` §1）。
+匿名用户在对话页看到的是**预设问答**（`GET /api/preset-qa`，见 §2.5），且前端**在提问前**就拦住（输入框禁用 + 登录引导），不让用户打完字才吃 401。
+
+> 两次行为变更在同一条线上：2026-09-12 起，**带了无效 Token 不再静默降级为匿名**（否则用户以为还登录着，实际会话归属、面板注入、封禁联动全部失效，后台也认不出数据归属）；2026-09-14 起，**未带 Token 也不再放行**。前端收到 401 会清凭据并回登录页（`api/client.ts` 的 `handleUnauthorized`，axios 与流式 `fetch` 两条路径都会处理），匿名则留在预设问答页并给登录入口。
 
 **历史组装（两种模式一致）**：取本会话**最近 20 条**消息为上限，再按 **1200 tokens 预算**从最近往前裁剪（超预算即截断，但始终保留最新一条）；同时
 ①丢弃尾部与本次提问相同的那条 user 消息（提问由 `prompt` 字段单独下发，重复发送会重复计费并干扰模型）；
@@ -106,17 +109,19 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 
 | 链路 | 触发条件 | 内容 | 预算 |
 | --- | --- | --- | --- |
-| **资产资料**（V2，公开数据） | 提问命中角色名（**与登录无关，匿名同样生效**） | 查 `asset_character_stat_weights` → 渲染成「【游戏资料】…」文本放入 `context.summary`，含 primary/secondary 分级与推荐主词条 | ≤400 tokens，最多 2 个角色 |
+| **资产资料**（V2，公开数据） | 提问命中角色名（**与登录无关**；2026-09-14 起匿名已不能提问，见 §2） | 查 `asset_character_stat_weights` → 渲染成「【游戏资料】…」文本放入 `context.summary`，含 primary/secondary 分级与推荐主词条 | ≤400 tokens，最多 2 个角色 |
 | **玩家档案**（V1，私有数据） | 携带 `Authorization: Bearer <token>` 且该账号已绑定游戏 UID | `context.player.characters`（展柜角色概览 + 点名角色明细） | ≤1500 tokens |
 
 两者都注入时，`summary` 里的资料排在玩家档案之前。命中但库里没有数据的角色会显式写成「本服暂无该角色的资料」，配合 AI 服务人格提示词的「资料外不编造」规则，冷门角色会老实承认不知道而不是编数值。
 
 改资料（`/api/admin/assets/import` 或直写 DB 后 reload、**带 `?purgeSnapshots=true`**）后，回答应随之变化 —— 这是 V2 的验收方式。会话归属记录在 `chat_sessions.user_id`（0 = 匿名）。
 
-### 2.4 会话管理（列表 / 明细 / 重命名；**需登录**）
+### 2.4 会话管理（列表 / 明细 / 重命名 / 删除；**需登录**）
 
-匿名没有「我的会话」这个概念，因此以下三个接口一律挂 `JWTAuth`（不是 `/api/chat` 的 `JWTAuthOptional`）：
+匿名没有「我的会话」这个概念，因此以下四个接口一律挂 `JWTAuth`：
 **未带 Token 或 Token 无效/过期 → 401**。消息只从服务端拉，前端不缓存正文。
+
+> 2026-09-14 起 `/api/chat` 也改为强制登录（见 §2），本组接口不再是"唯一的强制登录组"，但口径不变。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -137,6 +142,48 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 5. **写入侧同样校验归属**：`POST /api/chat` 带的 `sessionId` 若非本人所有（或已不存在、已删除），**一律当作新会话**，不会续聊别人的会话，也不会让已删除的会话复活；
 6. 非本人、不存在、已删除的会话，读 / 改名 / 删除统一 **404「会话不存在」**（不返回 403，避免被用来探测会话是否存在；重复删除也因这条自然幂等）；
 7. 重命名与删除都**不刷新 `updated_at`**（只改 `title` / `deleted_at`），否则列表顺序会因改名或删除而跳动。
+
+### 2.5 预设问答（**无需登录** · 已实现 2026-09-14）
+
+`GET /api/preset-qa`
+
+匿名用户在对话页看到的内容：**不调用模型、不消耗 token、不落库**。口径真源见 `shared-docs/05-AI使用边界设计（匿名·配额·内容治理）.md` §1.3。
+
+**响应 data**：`{ items: [{ id, sceneKey, question, answer, sort }] }`（只返回 `enabled=1`，按 `scene_key, sort` 排序）。
+
+| 项 | 说明 |
+| --- | --- |
+| 鉴权 | **无**——它是全站仅有的匿名可读业务接口（另一组是只读的 `/api/genshin/*`） |
+| 数据来源 | `preset_qa` 表：`scene_key` 分组 + `sort` 组内排序；下架用 `enabled=0`，**不做物理删除** |
+| 内容维护 | 本轮不做后台面板，先由 SQL 种子灌入（见 `shared-docs/05` §1.3） |
+| 不做 | 不做搜索、不做个性化、不记录点击（要统计再加） |
+
+### 2.6 配额与限流（**登录用户** · 已实现 2026-09-14）
+
+| 限制 | 口径 | 超限 |
+| --- | --- | --- |
+| **每日 token 配额** | 每用户每自然日（本地时区 UTC+8）`SUM(chat_messages.tokens)` ≤ `quota.daily_tokens_per_user`（默认 **100,000**，`0` = 不限） | **429** |
+| **单用户并发** | 同一用户同时进行中的 AI 请求 ≤ 2（流式与非流式都算） | **429** |
+| 全局日预算（可选） | 全站当日 token ≤ `quota.daily_tokens_global`（默认关闭） | **429**（全站熔断） |
+
+**429 响应体**（两种限流共用同一结构，靠 `message` 区分）：
+
+```json
+{
+  "code": 429,
+  "message": "今日 AI 额度已用完，明日 0 点重置",
+  "data": { "used": 100230, "limit": 100000, "resetAt": "2026-09-15T00:00:00+08:00" }
+}
+```
+
+| 要点 | 说明 |
+| --- | --- |
+| 检查时点 | **建会话之前**；流式请求在写出任何 SSE 帧之前拒绝（不能先建会话再拒） |
+| 上限性质 | **软上限**：不做事前预扣，允许"最后一问"溢出（最坏 = 上限 + 单次最大消耗），并发同理允许少量超支 |
+| 重置 | 自然日 0 点，**无定时任务**（读时按 `created_at` 窗口聚合，天然滚动重置） |
+| 并发计数 | 请求进入即占位，结束（含客户端断连）释放；被配额拒绝的请求不占位 |
+| C 端不下发 | 配额用量**不在响应里逐次下发**（只在下发 429 时给出 `used/limit/resetAt`）；后台观测见 §7.2 |
+| 待决策 | 超限后是硬拒还是降级到预设问答：**先硬拒**（`shared-docs/05` §5 D1） |
 
 ---
 
@@ -310,12 +357,14 @@ Invoke-RestMethod -Method Post "http://<服务地址>:8080/api/admin/assets/relo
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/internal/v1/admin/chat/sessions?keyword=&userId=&uid=&onlyDegraded=&onlyDeleted=&from=&to=&page=1&pageSize=20` | 会话列表（**不含消息正文**）；`keyword` **只匹配提问内容**（既定口径，不搜回答）；排序 `updated_at DESC, id DESC`；`pageSize` 上限 100；**默认不过滤用户已删除的会话**（含已删除，前端标注），`onlyDeleted=true` 只看已删除 |
+| GET | `/internal/v1/admin/chat/sessions?keyword=&userId=&uid=&onlyDegraded=&onlyDeleted=&onlyOffTopic=&from=&to=&page=1&pageSize=20` | 会话列表（**不含消息正文**）；`keyword` **只匹配提问内容**（既定口径，不搜回答）；排序 `updated_at DESC, id DESC`；`pageSize` 上限 100；**默认不过滤用户已删除的会话**（含已删除，前端标注），`onlyDeleted=true` 只看已删除；**`onlyOffTopic=true` 只看含无关提问的会话**（2026-09-14 新增，待实现） |
 | GET | `/internal/v1/admin/chat/sessions/{sessionId}/messages?afterId=&limit=` | 会话明细；**游标分页**（取 `afterId` 之后的消息，`hasMore` 提示还有）；`limit` 上限 500、默认 200；会话不存在 → 404 |
 
-**列表项字段**：`sessionId / title / userId(0=匿名) / username / displayName / genshinUid / messageCount / tokens / degradedCount / hasPlayerContext / hasAssetReference / lastQuestion(截断摘要) / createdAt / updatedAt / deletedAt(用户在 C 端删除的时间，null = 未删除)`，外层 `{items,total,page,pageSize}`。
+**列表项字段**：`sessionId / title / userId(0=匿名) / username / displayName / genshinUid / messageCount / tokens / degradedCount / hasPlayerContext / hasAssetReference / lastQuestion(截断摘要) / createdAt / updatedAt / deletedAt(用户在 C 端删除的时间，null = 未删除) / offTopicCount(会话内无关提问数，判定未开启时为 0，2026-09-14 新增)`，外层 `{items,total,page,pageSize}`。
 
-**消息字段**：`id / role / content / tokens / tokensInput / tokensOutput / tokensCached / model / profile / degraded / elapsedMs / createdAt`，外层 `{sessionId,userId,messages,hasMore}`。
+**消息字段**：`id / role / content / tokens / tokensInput / tokensOutput / tokensCached / model / profile / degraded / elapsedMs / createdAt / offTopic(仅 role=user 有意义；null = 未判定) / offTopicReason(子类，2026-09-14 新增)`，外层 `{sessionId,userId,messages,hasMore}`。
+
+> 用户列表（`/internal/v1/admin/users`）的契约真源在 `shared-docs/04-用户体系与鉴权边界设计.md` §4.1；2026-09-14 为其新增了 `usageDate / minDailyTokens / onlyOffTopic / offTopicMin` 入参与 `todayTokens / todayRequests / offTopicCount` 字段（当日用量与无关问题筛选，待实现）。
 
 **观测字段说明**：
 - `tokensCached`＝命中前缀缓存的 tokens（单价约为未命中的 1/50，**成本统计必须分开算**）；

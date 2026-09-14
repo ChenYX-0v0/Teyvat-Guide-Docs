@@ -67,6 +67,11 @@
 - [ ] **V2.2 数据支撑（已立项 2026-09-12）**：`asset_weapon_recommendations`（武器 → 推荐角色）与 `asset_relic_set_effects`（套装 2/4 件效果）的导入载荷 + 维护面板；先做套装效果（数据不依赖外部渠道），武器推荐角色等数据来源定了再补录。规划见 `../ai/05-开发路线图.md` §3「V2.2 已立项」，导入载荷届时登记到 `../web/04-API接口文档.md` §6.2
 - [x] **M3-b 对话查看页（2026-09-12 主体完成）**：web 侧扩列 + `/internal/v1/admin/chat/*` 两个只读接口；后台「AI 提瓦特向导 → 对话记录」（列表 + 明细抽屉 + 关键词/仅看降级）。设计见 `06-对话记录查看设计.md`（含实现记录 §10）；已定口径：匿名会话默认显示、关键词只搜提问、审计暂不做（B 档触发式）、保留期先不做
 - [x] **M3-b 补完（2026-09-14）**：用户管理页「查看对话」跳转（带 userId 筛选，`ChatLogPanel` 用 key 重挂载）、时间范围筛选（`DateRangePicker` → RFC3339，用本地日 00:00:00 / 23:59:59 转 UTC）、导出 CSV（Server Action 分页取全，上限 1000 行，带 UTF-8 BOM + 字段转义，只导列表级字段不含消息正文）、筛选重置
+- [x] **M3-d 用量配额观测 + 无关问题筛选（2026-09-14 立项并完成，设计见 `../shared/05-AI使用边界设计（匿名·配额·内容治理）.md`）**：
+  - 用户管理页：加「当日用量」列（`todayTokens`，附 input/output/cached/请求数）、筛选「今日 ≥ 5 万 token」（`usageDate` + `minDailyTokens`）、筛选「有无关提问」（`onlyOffTopic` / `offTopicMin`）；
+  - 对话记录页：加 `onlyOffTopic` 筛选与 `offTopicCount` 列，明细里给无关提问打 Tag（「无关 · `chitchat`」）；
+  - 依赖：web 侧内网接口扩参 + `chat_messages.off_topic / off_topic_reason` 落库（判定方式见 `../shared/05` §3.2 与 `../ai/07` TODO-03）；
+  - 组合用法：`minDailyTokens=50000` + `onlyOffTopic=true` = 「今日用量高**且**问无关问题」的名单。
 
 ---
 
