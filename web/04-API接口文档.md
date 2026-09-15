@@ -298,6 +298,7 @@ Invoke-RestMethod -Method Post "http://<服务地址>:8080/api/admin/assets/relo
 | characters[] | characters | `{id(avatarId), name, enName, element, rarity, icon}` |
 | weapons[] | weapons | `{id, name, enName, rarity, type, icon}` |
 | relicSets[] | relic_sets | `{setId, name, icon}` |
+| relicSetEffects[] | relic_set_effects | `{setId, piece, effect, source}` —— 套装 **2 / 4 件效果文本**（V2.2，2026-09-15 新增）；`piece` 只允许 2 或 4，主键 `(setId, piece)`；`source` 标注来源与核对状态（如「官方资料整理·待核对」），用于区分草稿与已核对数据 |
 | textMap[] | text_map_entries | `{hash, text}`（TextMapCHS：hash → 中文） |
 | propMap[] | prop_maps | `{propId, name, percent}` 词条 ID → 中文名；percent 决定数值格式 |
 | fightProps[] | fight_props | `{numId, propId}` Enka fightPropMap 数字枚举 → FIGHT_PROP_XXX |
