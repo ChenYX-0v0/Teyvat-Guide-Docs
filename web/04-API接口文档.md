@@ -251,6 +251,8 @@ $H = @{ Authorization = "Bearer " + $r.data.token }
 
 `GET /api/genshin/player-snapshot?uid=xxx` —— 读取最近一次查询落库的快照，不发起上游查询。
 
+**返回结构**：`data = { uid, profile, createdAt, updatedAt }` —— ⚠️ **档案本体在 `data.profile`**，其结构与 §4.1 的 `PlayerProfile` 相同（**别照 §4.1 直接取 `data.characters`，会取到空**）。`createdAt` / `updatedAt` 为该快照的落库与最近刷新时间。
+
 ### 4.3 账号 ↔ UID 绑定（需 Bearer Token，一对一）
 
 | 方法 | 路径 | 说明 |
