@@ -239,6 +239,14 @@ $H = @{ Authorization = "Bearer " + $r.data.token }
 **错误映射**：404 玩家不存在或未公开；503 游戏维护 / 上游限流；502 其他上游错误。
 **缓存**：本地快照优先（`player_profile_snapshots` 表，uid 主键）；负缓存 5min 防扫号穿透。
 
+> ⚠️ **上游 Enka 的两个坑（2026-09-21 线上实测，已在 `server/internal/service/enka/client.go` 处理）**：
+> ① Enka 对「玩家不存在 / 未公开」回的是 **404**（不是 400）。此前只判 400，导致 404 落进兜底分支，
+> 把上游原文直接拼进了给终端用户的错误文案；
+> ② 请求**必须显式带 `Accept: application/json`**：不带时上游对 404 返回的是 **HTML 错误页**
+> （`<title>This player does not exist.</title>`），同样会漏成用户可见内容。
+> 现状：400（UID 非法）/ 404 统一映射为「玩家不存在，或未在游戏内公开详细信息」；其余异常状态**只记日志**、
+> 对外统一 502 文案。另：请求路径末尾**不加**斜杠（带斜杠会先吃一次 308 跳转）。
+
 ### 4.2 档案快照
 
 `GET /api/genshin/player-snapshot?uid=xxx` —— 读取最近一次查询落库的快照，不发起上游查询。
