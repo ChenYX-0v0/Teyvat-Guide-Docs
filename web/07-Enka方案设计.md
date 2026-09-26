@@ -134,6 +134,10 @@ CREATE TABLE enka_cache (
 2. 兜底 [Dimbreath/AnimeGameData](https://github.com/Dimbreath/AnimeGameData)（游戏解包 Excel）。
 3. 由 CLI 转换导入；转换脚本一次性，后续新版本角色直接下载新 JSON 重新导入。
 
+> 📚 **实际使用的数据源、抽文件姿势、缺漏补齐流程与踩坑清单，见 `14-游戏资产中文文本获取手册.md`**
+> （2026-09-26 成文）：主源实为 `EnkaNetwork/API-docs` 的 `store/gi`（用 `git fetch`+`git show` 抽文件），
+> 游戏原表走 `DimbreathBot/AnimeGameData`（GitHub raw 媒体类型）；「hash 键」与「名字键」的区别是选源的关键。
+
 ## 5. 后端模块设计（严格遵循现有分层）
 
 ```
