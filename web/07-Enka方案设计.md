@@ -128,6 +128,21 @@ CREATE TABLE enka_cache (
 | `GET /api/admin/assets/missing` | 查缺补漏 | 按 hit_count 排序，导出待补录清单 |
 | `cmd/assetimport` CLI | 初始全量导入 | 读 JSON 文件入库（首次铺数据用） |
 
+### 4.2.1 数据落位规则（2026-09-26 定）
+
+> 一句话：**能进数据库的，都进数据库；仓里只留"种子 + 生成器"。**
+
+| 角色 | 是谁 | 规矩 |
+| --- | --- | --- |
+| **运行时真源** | `asset_*` / `character_stat_weights` 等表（启动全量加载进内存，翻译零 SQL） | 唯一权威；应用**只读库**，不读仓内 JSON |
+| **写路径（只此两条）** | ① 后台「资产映射管理」（角色/武器/套装/套装效果/推荐词条，写后自动 reload）② `POST /api/admin/assets/import`（批量） | 单点修改走后台；批量/重建走接口或 CLI |
+| **种子（入仓）** | `server/cmd/assetimport/*.json` 中**上游拿不到、只能人工维护**的那些（`prop_maps` / `relic_slots` / `fight_props` / `props_*.json` / `relic_set_effects.json` / `stat_weights_source.json`） | 只用于**首次铺底与灾难重建**；用完以库为准，**不要反向回写** |
+| **生成物（不入仓）** | `stat_weights_full.json`（由 `scripts/gen-stat-weights.mjs` 生成） | 已 gitignore；每次导入现场生成即可 |
+| **代码** | `gen-stat-weights.mjs` 只保留**逻辑与模板**（ARCHETYPES + build 流程） | **数据不入代码**：逐角色定档与人工覆盖已外置到 `stat_weights_source.json`（`AGENTS.md` §4.4 / §7-13 的硬要求） |
+
+配套事实：`prop_maps` 在后台**目前只能看不能改**（`AssetMappingPanel` 只 load 未提供 save）——
+补上编辑入口前，词条名修正仍走接口/脚本（见 `../ai/07` TODO-05 §8）。
+
 ### 4.3 初始数据源
 
 1. 首选 [Escartem/EnkaGameAssets](https://github.com/Escartem/EnkaGameAssets)：官方 Excel 的社区转换，含角色/武器/圣遗物/文本多语言 JSON。
