@@ -188,6 +188,44 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 | C 端不下发 | 配额用量**不在响应里逐次下发**（只在下发 429 时给出 `used/limit/resetAt`）；后台观测见 §7.2 |
 | 待决策 | 超限后是硬拒还是降级到预设问答：**先硬拒**（`shared-docs/05` §5 D1） |
 
+### 2.7 埋点上报（**匿名可用** · 已实现 2026-09-26）
+
+`POST /api/events` —— C 端功能使用统计（口径、事件字典与取舍真源：`../shared/07-前端埋点与使用统计.md`）。
+
+**请求**（批量 ≤20 条）：
+
+```json
+{
+  "events": [
+    {
+      "event": "page_view",
+      "page": "chat",
+      "platform": "mobile",
+      "props": { "referrer_page": "home", "is_logged_in": true },
+      "sessionId": "…",
+      "clientTs": 1790413700000
+    }
+  ]
+}
+```
+
+**响应**（**任何情况都是 200**，`accepted` 只用于观测，前端不需要处理失败）：
+
+```json
+{ "code": 0, "message": "ok", "data": { "accepted": 1 } }
+```
+
+| 要点 | 说明 |
+| --- | --- |
+| 鉴权 | **无需登录**；带 `Authorization: Bearer` 时记 `user_id`，否则 `user_id = NULL` |
+| **不采集匿名标识** | D1 定案（2026-09-26）：**表中没有 `anon_id`** —— 匿名事件只统计次数，不做匿名 UV、不做"匿名→登录"归因 |
+| 事件白名单 | 只收 `shared/07 §5` 的 14 个事件名；`props` 只保留该事件登记的键，其余**静默剥掉** |
+| 丢弃规则（全部静默，**不回 4xx**） | 未知事件名 / `props` 超 2KB / 一批超 20 条 / 参数不合法 → `accepted=0`；`page_leave` 的 `dwell_ms < 1000` 视为误触丢弃，`> 30min` 截为 30min |
+| 限流 | 每 IP 60 次/分钟、每登录用户 300 次/分钟（**IP 仅用于内存限流，不落库**） |
+| 时间口径 | 统计一律以服务端 `created_at` 为准，`clientTs` 仅作参考 |
+| 保留期 | 明细 90 天（`usage.retention_days`）；**聚合表 `usage_daily` 与看板属 P1，未开工** |
+| 开关 | 后端 `usage.enabled`（false 时一律 `accepted:0`，不落库）；前端仅生产构建上报 |
+
 ---
 
 ## 3. 鉴权（已实现）
