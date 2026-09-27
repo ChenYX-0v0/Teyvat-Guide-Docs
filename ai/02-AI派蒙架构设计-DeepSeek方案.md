@@ -177,8 +177,8 @@ messages = [SystemMessage(content=system_text)] + trimmed_history + [HumanMessag
 
 ```
 离线索引:
-  asset_characters / asset_weapons / asset_relic_sets
-  asset_character_stat_weights / asset_text_map_entries / 攻略文本
+  characters / weapons / relic_sets
+  character_stat_weights / text_map_entries / 攻略文本
         │  DocumentLoader（导出 JSON/CSV → Document）
         ▼
   RecursiveCharacterTextSplitter(chunk=500, overlap=80, 中文分隔符)
@@ -189,7 +189,7 @@ messages = [SystemMessage(content=system_text)] + trimmed_history + [HumanMessag
 
 在线检索:
   route → retriever(MMR, top_k=5, score_threshold) → 拼入 system 尾部
-       → 回答要求标注来源 ["来源: asset_character_stat_weights#胡桃"]
+       → 回答要求标注来源 ["来源: character_stat_weights#胡桃"]
 ```
 
 要点：
@@ -347,7 +347,7 @@ VECTOR_STORE=chroma
 | 数据类 | 例子 | 所有者 | 给 AI 服务的方式 |
 | --- | --- | --- | --- |
 | 用户私有数据 | 拥有角色、等级/命座/天赋、圣遗物、武器 | 主服务 | **随请求推送（push）**，AI 服务不落库 |
-| 公共资产字典 | `asset_characters` / `stat_weights` / 攻略文本 | 主服务（只读非私有） | **允许 ETL 镜像**到 AI 服务自己的向量库 |
+| 公共资产字典 | `characters` / `character_stat_weights` / 攻略文本（真表名无 `asset_` 前缀 ✓，见 `web/07 §3.1`） | 主服务（只读非私有） | **允许 ETL 镜像**到 AI 服务自己的向量库 |
 | 配置类 | `ai_prompts` | 主服务 | 内部接口拉取 + TTL 缓存 |
 
 红线：用户私有数据**不得**被 AI 服务持久化；公共知识**可以**镜像（非用户数据，且 RAG 需要本地索引）。

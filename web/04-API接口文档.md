@@ -273,7 +273,7 @@ $H = @{ Authorization = "Bearer " + $r.data.token }
 | characters[].statWeights | 推荐强化词条（来源 asset_character_stat_weights，见 6.2） |
 | characters[].weapon | `{name, rarity, level, affix}` |
 | characters[].relics[] | 圣遗物：name / set / rarity / level / pos（部位枚举）/ slot（部位中文名）/ mainStat / mainStatTier / subStats[]{name,value,count,tier} / **iconUrl**（部位图标，Enka 图床 `.../ui/UI_RelicIcon_*.png`；2026-09-21 新增，**旧快照无此字段**，强制刷新后才有） |
-| warnings | 翻译缺漏提示（前端当前不展示，明细仍落 asset_missings 表） |
+| warnings | 翻译缺漏提示（前端当前不展示，明细仍落 `missings` 表 ✓ —— 表名无 `asset_` 前缀，早期文档写 `asset_missings` 是设计名 ✗） |
 
 **错误映射**：404 玩家不存在或未公开；503 游戏维护 / 上游限流；502 其他上游错误。
 **缓存**：本地快照优先（`player_profile_snapshots` 表，uid 主键）；负缓存 5min 防扫号穿透。

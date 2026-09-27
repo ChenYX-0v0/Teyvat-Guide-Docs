@@ -19,7 +19,7 @@
         ├─② AssetService（翻译层）
         │     内存映射表（启动时从 MySQL 全量加载）
         │     avatarId / weaponId / setId / textHash → 中文名、元素、星级、图标
-        │     未命中 → asset_missing 表收集 + fallback 显示
+        │     未命中 → missings 表收集 + fallback 显示
         │
         └─③ 输出统一 PlayerProfile（结构化、人类可读）
 ```
@@ -66,7 +66,7 @@
 > ⚠️ **2026-09-27 校正：实际表名没有 `asset_` 前缀** ✗ —— 早期本文档写的是设计名（`asset_characters` …
 > `asset_missing`），模型侧并未加 `TableName()`，交给 GORM 默认命名 ⇒ 线上真实表名为
 > `characters` / `weapons` / `relic_sets` / `relic_set_effects` / `text_map_entries` / `prop_maps` /
-> `fight_props` / `relic_slots` / `affixes` / `missings`（实测 `teyvat_guide` 库 23 张表中 **0 张**带 `asset_` ✓）。
+> `fight_props` / `relic_slots` / `affixes` / `missings`（实测 `teyvat_guide` 库 **22 张**表中 **0 张**带 `asset_` ✓）。
 > 照旧名查库会"表不存在" ✗；本节 SQL 已按真名更正 ✓（业务表总览见 `web/04` §8）。
 
 ```sql
@@ -184,7 +184,7 @@ CREATE TABLE enka_cache (
 
 ```
 internal/service/asset/
-├─ model.go        # 五张映射表 + asset_missing 的 GORM 模型
+├─ model.go        # 五张映射表 + missings 的 GORM 模型
 ├─ service.go      # AssetService：全量加载、翻译接口、missing 收集、reload
 └─ import.go       # ImportAssets(payload) 批量 upsert（事务）
 
@@ -216,7 +216,7 @@ internal/handler/asset.go + router 注册：
     "characters": [            // 展柜角色（≤8）
       {
         "id": 10000002,
-        "name": "神里绫华",     // 来自 asset_characters，未命中为 "未知角色 #id"
+        "name": "神里绫华",     // 来自 characters，未命中为 "未知角色 #id"
         "element": "冰",
         "rarity": 5,
         "level": 90,
@@ -261,7 +261,7 @@ internal/handler/asset.go + router 注册：
 | 风险 | 对策 |
 | --- | --- |
 | Enka 无 SLA / 临时不可用 | 内存缓存 + 503 明确提示；保留错误映射 |
-| 初始映射数据不全 | asset_missing 收集 + 管理接口补录，不阻塞查询 |
+| 初始映射数据不全 | missings 收集 + 管理接口补录，不阻塞查询 |
 | 新版本角色上线 | 下载新 JSON → import，代码零改动 |
 | 恶意扫号打穿上游 | UID 负缓存 5 分钟 + 全局限速 |
 | 展柜为空 | 页面明确提示「对方未摆放角色展柜或未公开信息」 |
