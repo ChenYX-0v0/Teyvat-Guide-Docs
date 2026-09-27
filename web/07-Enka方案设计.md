@@ -35,12 +35,29 @@
 | 数据 | Enka 有无 | 说明 |
 | --- | --- | --- |
 | 昵称 / 等级 / 签名 / 世界等级 | ✅ | playerInfo 直读 |
-| 成就数 | ✅ | finishAchievementNum |
+| 成就数 / 好感数 | ✅ | finishAchievementNum / fetterCount |
 | **展柜角色**（最多 8 个） | ✅ | 等级 / 命座 / 好感 / 武器 / 圣遗物明细 |
-| 全部角色列表、深渊战绩、探索度 | ❌ | 米游社独有，本方案不再提供 |
+| **深境螺旋（概要）** | ✅ | `towerFloorIndex` / `towerLevelIndex` / `towerStarIndex`（层 / 间 / 星） |
+| **幻想真境剧诗（概要）** | ✅ | `theaterActIndex` / `theaterModeIndex` / `theaterStarIndex` |
+| **幽境危战（概要）** | ✅ | `stygianIndex` / `stygianSeconds` / `stygianId` |
+| 深渊 / 剧诗 / 危战的**详细战绩**（每间队伍、怪物阵容、逐层记录） | ❌ | 米游社独有（需登录态） |
+| 全部角色列表 / 探索度 | ❌ | 米游社独有 |
+| **体力（原粹树脂）/ 尘歌壶** | ❌ | 登录态数据（需 cookie + 签名器 + 风控）；米游社相关代码已按 §7 清理，**维持不做** |
 | 角色基础属性（生命/攻击等） | ✅ | propMap 数值，词条名需映射 |
 
-页面相应调整：档案展示「展柜角色」；深渊/探索度区块移除。
+> 📌 **2026-09-27 实测修正**：原表把「深渊战绩」整条判为 ❌ **不准确** —— 深渊 / 剧诗 / **危战**的**概要**字段
+> 就在 `playerInfo` 里。实测 UID 197794747（`GET /api/uid/{uid}`）拿到：
+> `towerFloorIndex=12` / `towerLevelIndex=3` / `towerStarIndex=36`（12 层 × 3 星，自洽 ✓）、
+> `theaterActIndex=10` / `theaterStarIndex=10`、`stygianIndex=6` / `stygianSeconds=324`；
+> 而 `resin` / `stamina` / `serenitea` / `furniture` / `explor` 在全 payload 中**出现 0 次** ✓（体力 / 尘歌壶 / 探索度确实没有）。
+>
+> ⚠️ **这 9 个字段当前没被解析**：`enka/model.go` 的 `PlayerInfo` 结构体只声明到 `fetterCount`，
+> 所以 `tower*` / `theater*` / `stygian*` **在反序列化时就被丢掉了** → AI 现在答不了
+> 「我这期深渊打满了吗 / 剧诗过了吗 / 危战打了吗」。要加 = 补 9 个字段 + 在 `translate.go` 拼进档案上下文
+> （数据在同一次请求里，**零新依赖、零额外请求**）。
+> ⚠️ 另注：`GET /api/uid/{uid}` **必须带尾斜杠会 308**（跟随跳转即可，实测 `location: /api/uid/197794747`）。
+
+页面相应调整：档案展示「展柜角色」；深渊/剧诗/危战**概要**现在数据可得、**可选做**（原本"区块移除"的结论可重开），探索度仍不可得 ✗。
 
 ## 3. 数据库设计（MySQL · teyvat_guide 库 · utf8mb4）
 
