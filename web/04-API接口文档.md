@@ -263,7 +263,7 @@ $H = @{ Authorization = "Bearer " + $r.data.token }
 | 参数 | 必填 | 说明 |
 | --- | --- | --- |
 | uid | 条件 | 9 位数字；**携带 Bearer Token 时可省略**，自动使用当前用户绑定的 UID（见 4.3） |
-| refresh | 否 | `true` 强制绕过本地快照直接查上游并更新快照 |
+| refresh | 否 | `true` 强制绕过本地快照直接查上游并更新快照。⚠️ **仅运维/排障用** ✓ —— 2026-09-28 起 C 端页面**不再暴露**这个开关（账号页去掉了「强制刷新」入口 ✓）；**接口参数保留** ✗：① 运维核对资产要用（`web/14` 的配方）；② 用户浏览器里缓存的**旧 bundle** 仍在发它 ⇒ 删后端支持会打坏老客户端 ✗ |
 
 **响应 data（PlayerProfile）**
 
@@ -274,7 +274,7 @@ $H = @{ Authorization = "Bearer " + $r.data.token }
 | characters[].stats[] | 面板属性 `{name, value, tier?}`；tier=`primary`/`secondary`（推荐属性，前端金色），空为未分级（灰色） |
 | characters[].statWeights | 推荐强化词条（来源 `character_stat_weights`，见 6.2；**无 `asset_` 前缀** ✓） |
 | characters[].weapon | `{name, rarity, level, affix}` |
-| characters[].relics[] | 圣遗物：name / set / rarity / level / pos（部位枚举）/ slot（部位中文名）/ mainStat / mainStatTier / subStats[]{name,value,count,tier} / **iconUrl**（部位图标，Enka 图床 `.../ui/UI_RelicIcon_*.png`；2026-09-21 新增，**旧快照无此字段**，强制刷新后才有） |
+| characters[].relics[] | 圣遗物：name / set / rarity / level / pos（部位枚举）/ slot（部位中文名）/ mainStat / mainStatTier / subStats[]{name,value,count,tier} / **iconUrl**（部位图标，Enka 图床 `.../ui/UI_RelicIcon_*.png`；2026-09-21 新增，**旧快照无此字段** ⇒ 需 `refresh=true` 重查一次才有 ✓，见本节的 refresh 参数说明） |
 | warnings | 翻译缺漏提示（前端当前不展示，明细仍落 `missings` 表 ✓ —— 表名无 `asset_` 前缀，早期文档写 `asset_missings` 是设计名 ✗） |
 
 **错误映射**：404 玩家不存在或未公开；503 游戏维护 / 上游限流；502 其他上游错误。
