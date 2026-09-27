@@ -109,7 +109,7 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 
 | 链路 | 触发条件 | 内容 | 预算 |
 | --- | --- | --- | --- |
-| **资产资料**（V2，公开数据） | 提问命中角色名（**与登录无关**；2026-09-14 起匿名已不能提问，见 §2） | 查 `asset_character_stat_weights` → 渲染成「【游戏资料】…」文本放入 `context.summary`，含 primary/secondary 分级与推荐主词条 | ≤400 tokens，最多 2 个角色 |
+| **资产资料**（V2，公开数据） | 提问命中角色名（**与登录无关**；2026-09-14 起匿名已不能提问，见 §2） | 查 `character_stat_weights` → 渲染成「【游戏资料】…」文本放入 `context.summary`，含 primary/secondary 分级与推荐主词条 | **≤800 tokens**，最多 2 个角色（2026-09-15 由 400 上调：V2.2 引入套装效果后一条 4 件套文本就有 100~200 字，400 会把套装整条挤掉 ✗） |
 | **玩家档案**（V1，私有数据） | 携带 `Authorization: Bearer <token>` 且该账号已绑定游戏 UID | `context.player.characters`（展柜角色概览 + 点名角色明细） | ≤1500 tokens |
 
 两者都注入时，`summary` 里的资料排在玩家档案之前。命中但库里没有数据的角色会显式写成「本服暂无该角色的资料」，配合 AI 服务人格提示词的「资料外不编造」规则，冷门角色会老实承认不知道而不是编数值。
@@ -154,8 +154,8 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 | 项 | 说明 |
 | --- | --- |
 | 鉴权 | **无**——它是全站仅有的匿名可读业务接口（另一组是只读的 `/api/genshin/*`） |
-| 数据来源 | `preset_qa` 表：`scene_key` 分组 + `sort` 组内排序；下架用 `enabled=0`，**不做物理删除** |
-| 内容维护 | 本轮不做后台面板，先由 SQL 种子灌入（见 `shared-docs/05` §1.3） |
+| 数据来源 | `preset_qas` 表（**真名**；早期文档写 `preset_qa` 是设计名 ✗，GORM 默认为复数 ✓）：`scene_key` 分组 + `sort` 组内排序；下架用 `enabled=0`，**不做物理删除** |
+| 内容维护 | **已有后台面板**：`GET/POST/PUT /internal/v1/admin/preset-qa`（`X-Internal-Key`，只上下架不物理删 ✓）；建表时服务端还会在表空时灌入 6 条种子（`service/preset.go`）✓ |
 | 不做 | 不做搜索、不做个性化；~~不记录点击（要统计再加）~~ → **已规划**：`chat_preset_expanded` 事件，见 `../shared/07-前端埋点与使用统计.md` |
 
 ### 2.6 配额与限流（**登录用户** · 已实现 2026-09-14）
@@ -219,11 +219,11 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 | --- | --- |
 | 鉴权 | **无需登录**；带 `Authorization: Bearer` 时记 `user_id`，否则 `user_id = NULL` |
 | **不采集匿名标识** | D1 定案（2026-09-26）：**表中没有 `anon_id`** —— 匿名事件只统计次数，不做匿名 UV、不做"匿名→登录"归因 |
-| 事件白名单 | 只收 `shared/07 §5` 的 14 个事件名；`props` 只保留该事件登记的键，其余**静默剥掉** |
+| 事件白名单 | 只收 `shared/07 §5` 登记的事件名 —— **2026-09-27 实测 18 个** ✓（v1.0 的 14 个 + 账号页悬浮体检 4 个 `account_analysis_*` v1.1 + 须知 2 个 `terms_*` v1.2 ✓，见 `service/usage.go` 的 `usageEventProps`）；`props` 只保留该事件登记的键，其余**静默剥掉** |
 | 丢弃规则（全部静默，**不回 4xx**） | 未知事件名 / `props` 超 2KB / 一批超 20 条 / 参数不合法 → `accepted=0`；`page_leave` 的 `dwell_ms < 1000` 视为误触丢弃，`> 30min` 截为 30min |
 | 限流 | 每 IP 60 次/分钟、每登录用户 300 次/分钟（**IP 仅用于内存限流，不落库**） |
 | 时间口径 | 统计一律以服务端 `created_at` 为准，`clientTs` 仅作参考 |
-| 保留期 | 明细 90 天（`usage.retention_days`）；**聚合表 `usage_daily` 与看板属 P1，未开工** |
+| 保留期 | 明细 90 天（`usage.retention_days`）；**聚合与看板已上线** ✓（2026-09-27 复核 ✗ 原先写"属 P1 未开工"已过期）：`usage_daily` 表 + `GET /internal/v1/admin/usage/{overview,events,series,funnel,export}`（`X-Internal-Key`，只读），由 `usage_stats.go` 的 `aggLoop` **每小时**重建「今天 + 昨天」（幂等，当天最多滞后 1 小时 ✓） |
 | 开关 | 后端 `usage.enabled`（false 时一律 `accepted:0`，不落库）；前端仅生产构建上报 |
 
 ---
@@ -235,6 +235,7 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 | POST | `/api/auth/register` | 无 | `{username, password, displayName?}`；用户名 3~32 字符，密码 ≥6 位。**`auth.allow_register=false` 时一律 403** `本站为不公开邀请制，已关闭注册；请联系管理员开通账号`（项目当前口径，账号由后台代建，见 `shared-docs/04` §4.4） |
 | POST | `/api/auth/login` | 无 | 返回 `{token, displayName}`（JWT，有效期 `auth.jwt_ttl_hours`） |
 | GET | `/api/auth/me` | Bearer | 当前用户 `{id, username}` |
+| POST | `/api/auth/terms` | Bearer | 用户须知（免责声明）同意留痕：`{version}` **只接受服务端当前生效版本**（`service.CurrentTermsVersion`，现为 `v1.0-20260927`），否则 400；落 `users.terms_version` / `terms_accepted_at`（见 `web/15`）。**2026-09-27 补登**（此前后端已实现但本文档漏列 ✗） |
 
 注册成功后前端自动调用登录完成会话建立。**不公开部署（`auth.allow_register=false`）下，前端登录页不展示注册入口**，只显示邀请制说明（`web/src/pages/LoginPage.tsx`；i18n `login.inviteOnly` / `login.inviteHint`）。
 
@@ -461,3 +462,8 @@ C 端用户发起的「删除会话」是**软删除**（`chat_sessions.deleted_
 | prop_maps / fight_props / relic_slots / affixes | 词条名 / 数字枚举 / 圣遗物部位 / 词缀映射 |
 | character_stat_weights | 角色推荐词条（JSON payload，含 tier 分级） |
 | missings | 翻译缺漏收集（补录依据） |
+| preset_qas | 预设问答（匿名可读；`scene_key` / `sort` / `enabled`，不做物理删除） |
+| character_relic_weights / character_relic_weight_rules | 圣遗物评分权重与覆盖规则（V3；规则已不参与算分，保留供参考 ✓，见 `ai/08`） |
+| character_relic_weights_mp | 小助手口径权重（**过渡兜底**：真源已改为 `character_stat_weights.payload` ✓；表名由 `TableName()` 钉死，否则 GORM 会造出复数表 ✗） |
+| usage_events / usage_daily | 埋点明细与按天聚合（见 §2.7） |
+| ai_prompts | 派蒙提示词（`scene_key` + 版本号，后台可新增版本 / 启用回滚） |

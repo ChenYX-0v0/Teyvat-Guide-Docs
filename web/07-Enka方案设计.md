@@ -61,11 +61,17 @@
 
 ## 3. 数据库设计（MySQL · teyvat_guide 库 · utf8mb4）
 
-### 3.1 映射表（前缀 asset_，均为读多写少，无外键）
+### 3.1 映射表（均为读多写少，无外键）
+
+> ⚠️ **2026-09-27 校正：实际表名没有 `asset_` 前缀** ✗ —— 早期本文档写的是设计名（`asset_characters` …
+> `asset_missing`），模型侧并未加 `TableName()`，交给 GORM 默认命名 ⇒ 线上真实表名为
+> `characters` / `weapons` / `relic_sets` / `relic_set_effects` / `text_map_entries` / `prop_maps` /
+> `fight_props` / `relic_slots` / `affixes` / `missings`（实测 `teyvat_guide` 库 23 张表中 **0 张**带 `asset_` ✓）。
+> 照旧名查库会"表不存在" ✗；本节 SQL 已按真名更正 ✓（业务表总览见 `web/04` §8）。
 
 ```sql
 -- 角色（avatarId → 展示信息）
-CREATE TABLE asset_characters (
+CREATE TABLE characters (
   id          BIGINT PRIMARY KEY,          -- avatarId，如 10000002
   name        VARCHAR(64)  NOT NULL,       -- 中文名：神里绫华
   en_name     VARCHAR(64)  NOT NULL,
@@ -76,7 +82,7 @@ CREATE TABLE asset_characters (
 );
 
 -- 武器
-CREATE TABLE asset_weapons (
+CREATE TABLE weapons (
   id          BIGINT PRIMARY KEY,          -- weaponId
   name        VARCHAR(64)  NOT NULL,
   en_name     VARCHAR(64)  NOT NULL,
@@ -87,7 +93,7 @@ CREATE TABLE asset_weapons (
 );
 
 -- 圣遗物套装
-CREATE TABLE asset_relic_sets (
+CREATE TABLE relic_sets (
   set_id      INT PRIMARY KEY,
   name        VARCHAR(64)  NOT NULL,
   icon        VARCHAR(128) NOT NULL,
@@ -95,20 +101,20 @@ CREATE TABLE asset_relic_sets (
 );
 
 -- 文本映射（StableHash → 中文），武器/圣遗物等名称的通用兜底
-CREATE TABLE asset_text_map (
+CREATE TABLE text_map_entries (
   hash        BIGINT PRIMARY KEY,          -- nameTextMapHash
   text        VARCHAR(255) NOT NULL
 );
 
 -- 属性 ID → 词条名（圣遗物主/副词条翻译）
-CREATE TABLE asset_prop_map (
+CREATE TABLE prop_maps (
   prop_id     VARCHAR(32) PRIMARY KEY,     -- FIGHT_PROP_HP / FIGHT_PROP_CRITICAL...
   name        VARCHAR(32)  NOT NULL,       -- 生命值 / 暴击率
   percent     TINYINT      NOT NULL        -- 1=百分比词条
 );
 
 -- 翻译缺漏收集（补录依据，不阻塞查询）
-CREATE TABLE asset_missing (
+CREATE TABLE missings (
   kind        VARCHAR(16)  NOT NULL,       -- character | weapon | relic_set | text | prop
   asset_id    VARCHAR(64)  NOT NULL,
   first_seen  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -117,9 +123,10 @@ CREATE TABLE asset_missing (
 );
 ```
 
-### 3.2 Enka 响应缓存（可先内存，预留表结构）
+### 3.2 Enka 响应缓存（**未建表** —— 进程内实现，此为预留结构）
 
 ```sql
+-- ⚠️ 2026-09-27 实测：线上库**没有** enka_cache 表 ✓（设计上就是"M1 先用内存" ✓）
 CREATE TABLE enka_cache (
   uid         VARCHAR(16) PRIMARY KEY,
   payload     JSON NOT NULL,
@@ -128,13 +135,16 @@ CREATE TABLE enka_cache (
 -- M1 用进程内 map + singleflight；跨实例部署时切换此表
 ```
 
+> 现行实现（`server/internal/service/enka/client.go`）：进程内 `cache`（TTL **60s**，与上游对齐）
+> + `negative`（**5 分钟**负缓存，防扫号穿透）+ `flights`（singleflight 合并同一 uid 的并发请求）✓。
+
 ## 4. 映射数据管理（核心：不改代码完成维护）
 
 ### 4.1 运行时策略
 
 - **启动**：AssetService 全量加载五张映射表进内存（总量 <10MB，毫秒级）。
 - **查询**：全部走内存 map，翻译零 SQL。
-- **未命中**：返回 fallback（`未知角色 #10000123`）+ 异步 upsert `asset_missing`（hit_count 累加）。
+- **未命中**：返回 fallback（`未知角色 #10000123`）+ 异步 upsert `missings`（hit_count 累加；表名真源见 §3.1 提示）。
 - **生效**：导入/补录接口成功后触发内存 reload，**立即生效，无需重启**。
 
 ### 4.2 更新通道（三个，全部不改代码）

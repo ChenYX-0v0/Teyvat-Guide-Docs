@@ -38,7 +38,7 @@
 │  │   · JWT 鉴权 → 用户须知闸门（terms 版本）→ 配额/并发闸门              │           │
 │  │   · 内存资产映射（启动时从 RDS 载入）                                 │           │
 │  │   · 玩家档案 ← Enka.Network（公网 HTTPS）                            │           │
-│  │   · 埋点写入 usage_events（白名单校验）+ 每日聚合 usage_daily          │           │
+│  │   · 埋点写入 usage_events（白名单校验）+ 每小时聚合 usage_daily        │           │
 │  │   · 提示词服务端：/internal/v1/ai/prompts（X-Internal-Key）           │           │
 │  │   · 调 AI：http://ai-service:8090（X-AI-Key）                        │           │
 │  └───────────────┬───────────────────────────────┬─────────────────────┘           │
@@ -70,9 +70,9 @@
 | 组件 | 跑在哪 | 产物 / 镜像 | 端口（暴露面） | 数据落在哪 |
 | --- | --- | --- | --- | --- |
 | **宿主机 Nginx** | 云上 ECS（**宿主**，非容器） | 系统包 nginx 1.24 + certbot（Let's Encrypt） | **80 / 443 对公网** | 证书 `/etc/letsencrypt/live/aiteyvat.com/` |
-| **C 端前端** | 云上 ECS，`web` 容器 | `teyvat-guide-web:20260927-0224`（Nginx + Vite 产物） | `127.0.0.1:8088→80`（仅回环） | 无（纯静态） |
-| **主服务** | 云上 ECS，`server` 容器 | `teyvat-guide-server:20260927-0224`（Go） | `127.0.0.1:8080`（仅回环） | RDS `teyvat_guide`（**19 张表**，含 `usage_events` / `usage_daily`） |
-| **AI 派蒙服务** | 云上 ECS，`ai-service` 容器 | `teyvat-ai:20260920-0220`（Python） | `127.0.0.1:8090`（仅回环，**禁止公网**） | 无状态（提示词存 RDS `ai_prompts`） |
+| **C 端前端** | 云上 ECS，`web` 容器 | `teyvat-guide-web:20260927-1610`（Nginx + Vite 产物） | `127.0.0.1:8088→80`（仅回环） | 无（纯静态） |
+| **主服务** | 云上 ECS，`server` 容器 | `teyvat-guide-server:20260927-2014`（Go） | `127.0.0.1:8080`（仅回环） | RDS `teyvat_guide`（**22 张表**，含 `usage_events` / `usage_daily`；2026-09-27 删掉孤儿表 `character_relic_weight_mps` ✓） |
+| **AI 派蒙服务** | 云上 ECS，`ai-service` 容器 | `teyvat-ai:20260927-1610`（Python） | `127.0.0.1:8090`（仅回环，**禁止公网**） | 无状态（提示词存 RDS `ai_prompts`） |
 | **数据库** | 阿里云 RDS MySQL **8.0.36** | — | 内网 3306（白名单只放 ECS 内网 IP） | `teyvat_guide` + `teyvat_admin` 两库 |
 | **镜像仓库** | 阿里云 ACR 个人版（cn-shanghai） | `crpi-ecqw70nr0f83o93t.cn-shanghai.personal.cr.aliyuncs.com/teyvat/*` | 公网 HTTPS | — |
 | **后台管理** | **本机**（`npm run dev`，**未上云**） | `demo-app`（Next.js） | 本机 `:3000` | RDS `teyvat_admin`（经隧道）+ 读业务库 `teyvat_guide` |
@@ -94,14 +94,14 @@
 | 2 | 宿主机 Nginx | `/` → `127.0.0.1:8088`；`/api/` → `127.0.0.1:8080`（**`proxy_buffering off`**）；`/api/admin/`、`/internal/` 404 | 同上 |
 | 3 | Nginx（`web` 容器） | 再反代一次 `server:8080`（同样关缓冲）；顺手带 `X-Robots-Tag: noindex` | `docker compose logs web` |
 | 4 | 主服务鉴权与闸门 | JWT → **用户须知版本闸门** → 每用户日配额 / 并发闸门（`05-AI使用边界设计`） | `logs server`：`access` 行 |
-| 5 | 资产映射（内存） | 启动时从 RDS 载入：角色 **124** / 武器 **255** / 套装 **65** / 套装效果 **128** / 文案 **498** / 词条名 **32** / 战斗词条 **15** / 词缀 **350** / 推荐词条 **124** | `logs server`：`asset maps loaded` |
+| 5 | 资产映射（内存） | 启动时从 RDS 载入：角色 **124** / 武器 **255** / 套装 **65** / 套装效果 **128** / 文案 **498** / 词条名 **24** / 战斗词条 **15** / 词缀 **350** / 推荐词条 **124**（**2026-09-27 实测值** ✓；词条名原为 32，因同名两套 key 去重 ⇒ 24 ✓） | `logs server`：`asset maps loaded` |
 | 6 | 玩家上下文 | 有 UID 时调 Enka.Network 取展柜 → 组进上下文 | `logs server`：`ai context attached` |
 | 7 | 资料注入 | 按问题关键词匹配资产并拼进提示词 | `logs server`：`ai asset reference attached` |
 | 8 | 提示词 | AI 服务 `PROMPT_STORE_MODE=http` → 主服务 `/internal/v1/ai/prompts`（`X-Internal-Key`） | `logs ai-service`：`prompt_store.backend` |
 | 9 | 调 AI 服务 | 主服务 → `http://ai-service:8090/v1/complete`（`X-AI-Key`） | `logs server`：失败打 `ai complete failed` |
 | 10 | 调模型 | AI 服务 → `api.deepseek.com`（命中前缀缓存 → `tokens_cached`） | `logs ai-service`：`llm.completed` |
 | 11 | 回写与落库 | SSE 逐字回写前端；`chat_messages` / 用量落 RDS；回答末尾带「内容由 AI 生成」（前端标识） | 前端气泡 + `logs server` |
-| 12 | 埋点（旁路） | 前端 `track()` → `POST /api/events`（匿名可上报、白名单过滤）→ `usage_events`；每日 03:30 聚合 `usage_daily` | `logs server`：`usage ingest` |
+| 12 | 埋点（旁路） | 前端 `track()` → `POST /api/events`（匿名可上报、白名单过滤）→ `usage_events`；**每小时**重建「今天 + 昨天」的 `usage_daily`（幂等，当天数据最多滞后 1 小时 ⇒ 不必等次日 03:30 ✓；`usage_stats.go` 的 `aggLoop`） | `logs server`：`usage ingest` |
 
 > **用户看到兜底话术**（"派蒙现在有点晕乎乎的…"）= 第 9/10 步失败：先看 `logs server` 的 `ai complete failed` 的 `err`，再看 `logs ai-service`。
 > **登录后被弹窗拦住** = 用户须知版本不一致（正常行为）：`users.terms_version` ≠ 服务端 `CurrentTermsVersion`，见 `../web/15`。
