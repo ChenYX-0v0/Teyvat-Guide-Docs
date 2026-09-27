@@ -70,7 +70,7 @@
 | 组件 | 跑在哪 | 产物 / 镜像 | 端口（暴露面） | 数据落在哪 |
 | --- | --- | --- | --- | --- |
 | **宿主机 Nginx** | 云上 ECS（**宿主**，非容器） | 系统包 nginx 1.24 + certbot（Let's Encrypt） | **80 / 443 对公网** | 证书 `/etc/letsencrypt/live/aiteyvat.com/` |
-| **C 端前端** | 云上 ECS，`web` 容器 | `teyvat-guide-web:20260928-0031`（Nginx + Vite 产物） | `127.0.0.1:8088→80`（仅回环） | 无（纯静态） |
+| **C 端前端** | 云上 ECS，`web` 容器 | `teyvat-guide-web:20260928-0109`（Nginx + Vite 产物） | `127.0.0.1:8088→80`（仅回环） | 无（纯静态） |
 | **主服务** | 云上 ECS，`server` 容器 | `teyvat-guide-server:20260928-0031`（Go） | `127.0.0.1:8080`（仅回环） | RDS `teyvat_guide`（**23 张表**，含 `usage_events` / `usage_daily` / `invite_codes` ✓；2026-09-27 删掉孤儿表 `character_relic_weight_mps` ✓、2026-09-28 新增邀请码表 `invite_codes` ✓） |
 | **AI 派蒙服务** | 云上 ECS，`ai-service` 容器 | `teyvat-ai:20260927-1610`（Python） | `127.0.0.1:8090`（仅回环，**禁止公网**） | 无状态（提示词存 RDS `ai_prompts`） |
 | **数据库** | 阿里云 RDS MySQL **8.0.36** | — | 内网 3306（白名单只放 ECS 内网 IP） | `teyvat_guide` + `teyvat_admin` 两库 |
