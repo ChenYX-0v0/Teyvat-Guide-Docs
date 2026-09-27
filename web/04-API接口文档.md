@@ -233,7 +233,7 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
 | GET | `/api/auth/config` | 无 | **注册入口可用性**（2026-09-27 新增，公开接口）：`{allowRegister, smsEnabled, smsMock, smsCodeTTLSeconds, smsResendAfterSeconds, requireInviteCode}` —— 前端**据此决定显示注册入口还是"邀请制"提示**（硬编码会做出"点了才发现 403"的死按钮 ✗） |
-| POST | `/api/auth/sms/send` | 无 | **发送注册验证码**（2026-09-27 新增，公开接口）：`{phone}` → `{resendAfterSeconds, expiresInSeconds}`。**响应体不含验证码** ✗（验证码只在短信里）；三重限速：同号 60s / 同号每日 10 次 / 同 IP 每小时 20 次 ⇒ 超限 **429 + `data.retryAfterSeconds`**（前端直接接倒计时 ✓）；**注册关闭时 403**（否则"不公开部署"也会被刷短信费 ✗）；手机号非法 400；通道未开启 503 |
+| POST | `/api/auth/sms/send` | 无 | **发送注册验证码**（2026-09-27 新增，公开接口）：`{phone, inviteCode?}` → `{resendAfterSeconds, expiresInSeconds}`。⚠️ **2026-09-28 起邀请码先行**：`auth.require_invite_code=true` 时**不填 / 填错 ⇒ 一条短信都不发** ✗（400「请填写邀请码」/「邀请码不存在或已停用」），此时不消耗任何短信费 ✓。**响应体不含验证码** ✗（验证码只在短信里）；三重限速：同号 60s / 同号每日 10 次 / 同 IP 每小时 20 次 ⇒ 超限 **429 + `data.retryAfterSeconds`**（前端直接接倒计时 ✓）；**注册关闭时 403**（否则"不公开部署"也会被刷短信费 ✗）；手机号非法 400；通道未开启 503 |
 | POST | `/api/auth/register` | 无 | **手机号注册（2026-09-27 起）**：`{phone, code, password, displayName?}` —— 大陆 11 位手机号 + 短信验证码 + 密码 ≥6 位；**账号名就是手机号**（登录链路零改动 ✓，昵称缺省 = 脱敏手机号 `138****5678`）。错误：验证码错/过期 400、密码过短 400、手机号已注册 **409**、短信未开启 503、**`auth.allow_register=false` 时一律 403** `本站为不公开邀请制，已关闭注册；请联系管理员开通账号`（默认口径；账号也可由后台代建 ✓）。⚠️ 顺序：**先验码再查重** —— 反过来的话"这个号注册过没有"就成了不需持码就能探测的信息 ✗ |
 | POST | `/api/auth/login` | 无 | 返回 `{token, displayName}`（JWT，有效期 `auth.jwt_ttl_hours`） |
 | GET | `/api/auth/me` | Bearer | 当前用户 `{id, username}` |
