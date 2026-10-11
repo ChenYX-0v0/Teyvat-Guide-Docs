@@ -239,6 +239,11 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 | GET | `/api/auth/me` | Bearer | 当前用户 `{id, username}` |
 | POST | `/api/auth/terms` | Bearer | 用户须知（免责声明）同意留痕：`{version}` **只接受服务端当前生效版本**（`service.CurrentTermsVersion`，现为 `v1.0-20260927`），否则 400；落 `users.terms_version` / `terms_accepted_at`（见 `web/15`）。**2026-09-27 补登**（此前后端已实现但本文档漏列 ✗） |
 
+| PUT | `/api/auth/profile` | Bearer | **改昵称**（2026-10-11 新增）：`{displayName}` → `{displayName}`。服务端 TrimSpace ✓、**按字符**限长 **24** ✓、**空串 = 清空昵称** ✓（界面回落显示用户名 / 脱敏手机号），因此该字段**刻意不设 `required`** ✗；值未变则不写库（幂等 ✓）。只开放昵称：**用户名（手机号）不可改** ✗（它就是登录凭据），绑定的游戏 UID 走账号页专用接口 ✓。超长 400、未登录 401 |
+| POST | `/api/auth/password` | Bearer | **修改密码**（2026-10-11 新增）：`{oldPassword, newPassword}` → `{changed:true}`。先验旧密码（bcrypt），再用**与注册同一套**的强度规则校验新密码（≥6 位；`validatePassword` 是唯一真源 ✓）。⚠️ **错误码刻意分档**：「当前密码不对」/「与旧密码相同」/「太短」一律 **400** ✓ —— **绝不能给 401** ✗，因为前端把 401 当登录态失效、会直接把人踢回登录页 ✓。成功只记 uid 日志，**绝不记密码** ✗ |
+
+> ⚠️ **已知边界**（2026-10-11 记）：改密码**不会吊销其他设备已签发的 Token** ✗ —— JWT 载荷只有 `uid/username/exp/iat`，没有"密码版本位"；要做"改密即踢下线"，需给 `users` 加一列 + 在 `JWTAuth` 里比对（中间件已有每请求的用户状态检查，改造成本不大），属**独立一块**，尚未排期 ✓。
+
 注册成功后前端自动调用登录完成会话建立。**不公开部署（`auth.allow_register=false`）下，前端登录页不展示注册入口**，只显示邀请制说明（`web/src/pages/LoginPage.tsx`；i18n `login.inviteOnly` / `login.inviteHint`）。
 
 **curl 示例**
