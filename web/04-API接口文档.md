@@ -266,6 +266,12 @@ $H = @{ Authorization = "Bearer " + $r.data.token }
 
 `GET /api/genshin/player?uid=197794747[&refresh=true]`
 
+> ⚠️ **2026-10-12 起（用户口径 A）：登录用户「查询成功即自动绑定」该 UID** ✓ ——
+> 省掉"查到档案后再点一次绑定"那一步 ✓；查**别的** UID 即**改绑**（这个代价用户已确认接受 ✓）。
+> 绑定点刻意放在**档案取回来之后** ✓：查一个不存在 / 未公开的 UID **不会**把账号绑过去 ✗。
+> **匿名（无 Token）行为完全不变** ✓（没有账号可绑 ✓，仍可按 uid 查 ✓）。
+> 界面上把这条做成查询卡下方的一行小字（**事先告知** ✓），"绑定"按钮已删除 ✓（详见 §4.3）。
+
 | 参数 | 必填 | 说明 |
 | --- | --- | --- |
 | uid | 条件 | 9 位数字；**携带 Bearer Token 时可省略**，自动使用当前用户绑定的 UID（见 4.3） |
@@ -328,6 +334,13 @@ $H = @{ Authorization = "Bearer " + $r.data.token }
 | POST | `/api/genshin/binding` | 绑定 `{uid, server?}`（server 默认 `cn_gf01`）；**绑定前实查 Enka 验证 UID 存在且档案公开** |
 | GET | `/api/genshin/binding` | 查询 `{bound, uid?, server?}` |
 | DELETE | `/api/genshin/binding` | 解绑 |
+
+> ⚠️ **2026-10-12 口径变更**：主查询路径（§4.1 的 `/player`）现在**查询成功即自动绑定** ✓，
+> 所以 **`POST /api/genshin/binding` 界面已不再调用** ✓ —— 但接口**刻意保留**：
+> ① 用户浏览器里缓存的老 bundle 仍在发它 ✗，删掉会让那些页面"点绑定报 404" ✓；
+> ② 显式绑定本身仍是合法入口 ✓，只是当前 UI 用不上 ✓。
+> 另：默认 `server` 由主服务 `service.DefaultGenshinServer` 统一提供 ✓（显式绑定与自动绑定共用一份 ✓）；
+> **换绑时沿用原有 server** ✓（不会顺手把它清空 ✗）。
 
 ---
 
