@@ -162,7 +162,7 @@ remote 模式下非流式调 `POST /v1/complete`、流式调 `POST /v1/complete/
 
 | 限制 | 口径 | 超限 |
 | --- | --- | --- |
-| **每日 token 配额** | 每用户每自然日（本地时区 UTC+8）`SUM(chat_messages.tokens)` ≤ `quota.daily_tokens_per_user`（默认 **100,000**，`0` = 不限） | **429** |
+| **每日 token 配额** | 每用户每自然日（本地时区 UTC+8）`SUM(chat_messages.tokens)` ≤ `quota.daily_tokens_per_user`（默认 **1,000,000**；2026-10-12 由 10 万上调 ✓，`0` = 不限） | **429** |
 | **单用户并发** | 同一用户同时进行中的 AI 请求 ≤ 2（流式与非流式都算） | **429** |
 | 全局日预算（可选） | 全站当日 token ≤ `quota.daily_tokens_global`（默认关闭） | **429**（全站熔断） |
 
