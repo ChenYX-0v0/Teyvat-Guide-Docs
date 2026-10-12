@@ -186,6 +186,24 @@ Top 命中（说明是**高频**缺漏 ✗，不是边角）：
 
 ---
 
+### 7.4 数据变更记录（人工改动，逐条留痕）
+
+> 为什么记在这里：下面这些是**人工直接改库**的内容改动（不是导入管线产生的 ✓）。
+> 出问题时要能一眼看到"什么时候改了什么、怎么回滚" ✓。
+
+| 日期 | 表 | 改动 | 影响面（**先想清楚这个** ✓） | 回滚点 |
+| --- | --- | --- | --- | --- |
+| 2026-10-12 | `character_stat_weights` | 用户要求：**空之杯主词条推荐元素伤害**的角色，`subStats` 里也要带上**同名元素伤害**并置 `tier=primary`（金色主要 ✓）。实际：**61 行新增** ✓ + **1 行**由 `secondary/50` 升为 `primary/5` ✓；已有 `primary` 的 **16 行原样不动** ✓（不覆盖人工数据 ✗）。`weight` 沿用用户既有约定 **5**（金色主要 + 数值优先级刻意压低 ✓）。命中集共 **78 行**（= 元素伤害合计 ✓；`物理伤害加成` 4 行**未处理** ✓）。⚠️ 元素→枚举名直接取自数据本身：`FIGHT_PROP_{FIRE,WATER,ELEC,ICE,WIND,ROCK,GRASS}_ADD_HURT` ✓ | **只影响"推荐词条"的展示与 AI 上下文** ✓：评分**不受影响** ✓（`ScoreRelic` 走 `character_relic_weights`，不读 `subStats[].weight` ✓）；⚠️ 圣遗物副词条**不可能**出现元素伤害 ⇒ 档案页「有效词条」统计**不会**因此增加 ✓（它按真实副词条匹配 ✓） | `deploy/out/stat-weights-backup-20261012.tsv`（整表 **124** 行 ✓）、`deploy/out/stat-weights-hit-rows.tsv`（命中 **78** 行 ✓）、`deploy/out/fix-element-goblet.sql`（逐行 UPDATE ✓）—— 均在 `deploy/out/`（已 gitignore ✓） |
+
+> ⚠️ **生效动作（必须做，否则用户仍看旧推荐 ✗）**：`POST /api/admin/assets/reload?purgeSnapshots=true`
+> —— 已对**本机 8080** 与**云上（经隧道 18080）**各执行一次，均返回 `{reloaded:true, snapshotsPurged:true}` ✓。
+>
+> **验收（线上真档案）**：`GET /api/genshin/player?uid=197794747&refresh=true` 返回的 12 个角色中 **7 个命中** ✓，
+> 其 `subStats` 里的元素伤害均为 `tier=primary` / `weight=5` ✓，且**中文名翻译正常** ✓
+> （丝柯克→冰 ✓、芙宁娜/哥伦比娅→水 ✓、兹白→岩 ✓、菲林斯/伊涅芙→雷 ✓、杜林→火 ✓）。
+
+---
+
 ## 8. 操作手册（怎么改数据才生效 ✓）
 
 | 想做的事 | 做法 |
